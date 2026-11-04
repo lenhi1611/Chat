@@ -3,8 +3,11 @@
  * `source(none)` disables automatic detection (which would scan the whole
  * monorepo from the workspace root) in favour of explicit @source entries.
  */
+/* Cascade order expected by zard/ui (ng-icon lowest). Must precede the imports. */
+@layer ng-icon, theme, base, components, utilities;
 @import 'tailwindcss' source(none);
+/* Shared design tokens + zard/ui base styles; declares @source for libs/shared/ui. */
 @import '../../../libs/shared/ui/src/styles/theme.css';
 
-/* This app's own templates. The shared UI library declares its own @source in theme.css. */
+/* This app's own templates. */
 @source './';

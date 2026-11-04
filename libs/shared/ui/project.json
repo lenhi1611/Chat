@@ -5,6 +5,27 @@
   "prefix": "ui",
   "projectType": "library",
   "tags": ["scope:shared", "type:lib", "platform:angular"],
-  "// targets": "to see all targets run: nx show project ui --web",
-  "targets": {}
+  "targets": {
+    "build": {
+      "executor": "@nx/angular:ng-packagr-lite",
+      "outputs": ["{workspaceRoot}/dist/{projectRoot}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "project": "libs/shared/ui/ng-package.json",
+        "tsConfig": "libs/shared/ui/tsconfig.lib.json"
+      },
+      "configurations": {
+        "production": {
+          "tsConfig": "libs/shared/ui/tsconfig.lib.prod.json"
+        },
+        "development": {}
+      }
+    },
+    "test": {
+      "executor": "@nx/angular:unit-test",
+      "options": {
+        "watch": false
+      }
+    }
+  }
 }

@@ -18,6 +18,10 @@ export const sharedPackages = () =>
     '@angular/router': singleton,
     '@angular/platform-browser': singleton,
     '@angular/forms': singleton,
+    // Used by @realtime-chat/ui (zard/ui): both hold DI services/tokens
+    // (Overlay, Directionality, icon registry) that must exist only once.
+    '@angular/cdk': singleton,
+    '@ng-icons/core': singleton,
 
     // Phase 1: add state management + rxjs here with the same `singleton`
     // config, e.g.
@@ -39,6 +43,10 @@ export const skip = [
   'rxjs/fetch',
   'rxjs/testing',
   'rxjs/webSocket',
+  // @angular/cdk secondaries that are not browser modules: schematics run in
+  // Node, `*-prebuilt(.css)` are stylesheets.
+  /^@angular\/cdk\/schematics/,
+  /^@angular\/cdk\/.*-prebuilt(\.css)?$/,
 ];
 
 export const features = {
