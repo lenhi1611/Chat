@@ -4,7 +4,7 @@
   "projectType": "application",
   "prefix": "app",
   "sourceRoot": "apps/shell/src",
-  "tags": ["scope:shell", "type:app"],
+  "tags": ["scope:shell", "type:app", "platform:angular"],
   "targets": {
     "build": {
       "executor": "@angular-architects/native-federation:build",

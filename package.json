@@ -2,8 +2,18 @@
   "name": "@realtime-chat/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
   "private": true,
+  "scripts": {
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f",
+    "serve:all": "nx run-many -t serve -p shell mfe-chat api-gateway --parallel=5",
+    "lint": "nx run-many -t lint",
+    "build": "nx run-many -t build",
+    "test": "nx run-many -t test",
+    "format": "nx format:write",
+    "format:check": "nx format:check"
+  },
   "devDependencies": {
     "@angular-architects/native-federation": "~22.2.4",
     "@angular-devkit/core": "~22.2.0",

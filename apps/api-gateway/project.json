@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/api-gateway/src",
   "projectType": "application",
-  "tags": ["scope:api", "type:app"],
+  "tags": ["scope:api", "type:app", "platform:node"],
   "targets": {
     "prune-lockfile": {
       "dependsOn": ["build"],

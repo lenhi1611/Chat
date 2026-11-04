@@ -4,7 +4,7 @@
   "projectType": "application",
   "prefix": "chat",
   "sourceRoot": "apps/mfe-chat/src",
-  "tags": ["scope:mfe", "type:app"],
+  "tags": ["scope:mfe", "type:app", "platform:angular"],
   "targets": {
     "build": {
       "executor": "@angular-architects/native-federation:build",
