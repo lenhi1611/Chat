@@ -1,13 +1,11 @@
-import { Component } from '@angular/core';
-import { RouterModule } from '@angular/router';
-import { NxWelcome } from './nx-welcome';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 
 @Component({
-  imports: [NxWelcome, RouterModule],
+  imports: [RouterOutlet],
   selector: 'chat-root',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
-export class App {
-  protected title = 'mfe-chat';
-}
+export class App {}

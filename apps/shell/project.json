@@ -7,6 +7,65 @@
   "tags": ["scope:shell", "type:app"],
   "targets": {
     "build": {
+      "executor": "@angular-architects/native-federation:build",
+      "options": {
+        "cacheExternalArtifacts": true,
+        "tsConfig": "apps/shell/tsconfig.federation.json"
+      },
+      "configurations": {
+        "production": {
+          "target": "shell:esbuild:production"
+        },
+        "development": {
+          "target": "shell:esbuild:development",
+          "dev": true
+        }
+      },
+      "defaultConfiguration": "production",
+      "outputs": ["{workspaceRoot}/dist/apps/shell"],
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": [
+        "production",
+        "^production",
+        "{projectRoot}/federation.config.mjs",
+        "{workspaceRoot}/tools/federation/**/*"
+      ]
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@angular-architects/native-federation:build",
+      "options": {
+        "target": "shell:serve-original:development",
+        "tsConfig": "apps/shell/tsconfig.federation.json",
+        "rebuildDelay": 500,
+        "cacheExternalArtifacts": true,
+        "dev": true,
+        "devServer": true,
+        "port": 0
+      }
+    },
+    "test": {
+      "executor": "@angular/build:unit-test",
+      "options": {
+        "watch": false
+      }
+    },
+    "serve-static": {
+      "continuous": true,
+      "readyWhen": {
+        "signal": true
+      },
+      "dependsOn": ["build"],
+      "executor": "@nx/web:file-server",
+      "options": {
+        "buildTarget": "shell:build",
+        "port": 4200,
+        "staticFilePath": "dist/apps/shell/browser",
+        "spa": true
+      }
+    },
+    "esbuild": {
       "executor": "@angular/build:application",
       "outputs": ["{options.outputPath}"],
       "defaultConfiguration": "production",
@@ -20,7 +79,8 @@
             "input": "apps/shell/public"
           }
         ],
-        "styles": ["apps/shell/src/styles.css"]
+        "styles": ["apps/shell/src/styles.css"],
+        "polyfills": ["es-module-shims"]
       },
       "configurations": {
         "production": {
@@ -45,7 +105,7 @@
         }
       }
     },
-    "serve": {
+    "serve-original": {
       "continuous": true,
       "readyWhen": {
         "signal": true
@@ -57,31 +117,11 @@
       },
       "configurations": {
         "production": {
-          "buildTarget": "shell:build:production"
+          "buildTarget": "shell:esbuild:production"
         },
         "development": {
-          "buildTarget": "shell:build:development"
+          "buildTarget": "shell:esbuild:development"
         }
-      }
-    },
-    "test": {
-      "executor": "@angular/build:unit-test",
-      "options": {
-        "watch": false
-      }
-    },
-    "serve-static": {
-      "continuous": true,
-      "readyWhen": {
-        "signal": true
-      },
-      "dependsOn": ["build"],
-      "executor": "@nx/web:file-server",
-      "options": {
-        "buildTarget": "shell:build",
-        "port": 4200,
-        "staticFilePath": "dist/apps/shell/browser",
-        "spa": true
       }
     }
   }

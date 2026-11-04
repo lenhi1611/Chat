@@ -1,5 +1,13 @@
-import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
-import { App } from './app/app';
+import { initFederation } from '@angular-architects/native-federation';
 
-bootstrapApplication(App, appConfig).catch((err) => console.error(err));
+// Remote: no manifest of its own. Initialising federation lets it reuse the
+// shared Angular packages when it runs standalone on :4202.
+initFederation(
+  {},
+  {
+    hostRemoteEntry: { url: './remoteEntry.json' },
+  },
+)
+  .catch((err) => console.error(err))
+  .then(() => import('./bootstrap'))
+  .catch((err) => console.error(err));

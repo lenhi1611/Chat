@@ -7,6 +7,65 @@
   "tags": ["scope:mfe", "type:app"],
   "targets": {
     "build": {
+      "executor": "@angular-architects/native-federation:build",
+      "defaultConfiguration": "production",
+      "options": {
+        "cacheExternalArtifacts": true,
+        "tsConfig": "apps/mfe-chat/tsconfig.federation.json"
+      },
+      "configurations": {
+        "production": {
+          "target": "mfe-chat:esbuild:production"
+        },
+        "development": {
+          "target": "mfe-chat:esbuild:development",
+          "dev": true
+        }
+      },
+      "outputs": ["{workspaceRoot}/dist/apps/mfe-chat"],
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": [
+        "production",
+        "^production",
+        "{projectRoot}/federation.config.mjs",
+        "{workspaceRoot}/tools/federation/**/*"
+      ]
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@angular-architects/native-federation:build",
+      "options": {
+        "target": "mfe-chat:serve-original:development",
+        "tsConfig": "apps/mfe-chat/tsconfig.federation.json",
+        "rebuildDelay": 500,
+        "cacheExternalArtifacts": true,
+        "dev": true,
+        "devServer": true,
+        "port": 0
+      }
+    },
+    "test": {
+      "executor": "@angular/build:unit-test",
+      "options": {
+        "watch": false
+      }
+    },
+    "serve-static": {
+      "continuous": true,
+      "readyWhen": {
+        "signal": true
+      },
+      "dependsOn": ["build"],
+      "executor": "@nx/web:file-server",
+      "options": {
+        "buildTarget": "mfe-chat:build",
+        "port": 4202,
+        "staticFilePath": "dist/apps/mfe-chat/browser",
+        "spa": true
+      }
+    },
+    "esbuild": {
       "executor": "@angular/build:application",
       "outputs": ["{options.outputPath}"],
       "defaultConfiguration": "production",
@@ -20,7 +79,8 @@
             "input": "apps/mfe-chat/public"
           }
         ],
-        "styles": ["apps/mfe-chat/src/styles.css"]
+        "styles": ["apps/mfe-chat/src/styles.css"],
+        "polyfills": ["es-module-shims"]
       },
       "configurations": {
         "production": {
@@ -45,7 +105,7 @@
         }
       }
     },
-    "serve": {
+    "serve-original": {
       "continuous": true,
       "readyWhen": {
         "signal": true
@@ -57,31 +117,11 @@
       },
       "configurations": {
         "production": {
-          "buildTarget": "mfe-chat:build:production"
+          "buildTarget": "mfe-chat:esbuild:production"
         },
         "development": {
-          "buildTarget": "mfe-chat:build:development"
+          "buildTarget": "mfe-chat:esbuild:development"
         }
-      }
-    },
-    "test": {
-      "executor": "@angular/build:unit-test",
-      "options": {
-        "watch": false
-      }
-    },
-    "serve-static": {
-      "continuous": true,
-      "readyWhen": {
-        "signal": true
-      },
-      "dependsOn": ["build"],
-      "executor": "@nx/web:file-server",
-      "options": {
-        "buildTarget": "mfe-chat:build",
-        "port": 4202,
-        "staticFilePath": "dist/apps/mfe-chat/browser",
-        "spa": true
       }
     }
   }
