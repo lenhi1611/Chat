@@ -50,3 +50,7 @@ Thumbs.db
 !.env.example
 
 .angular
+
+__screenshots__/
+vitest.config.*.timestamp*
+.vitest

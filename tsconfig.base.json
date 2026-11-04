@@ -13,7 +13,10 @@
     "lib": ["es2022", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "paths": {}
+    "paths": {
+      "@realtime-chat/contracts": ["./libs/shared/contracts/src/index.ts"],
+      "@realtime-chat/ui": ["./libs/shared/ui/src/index.ts"]
+    }
   },
   "exclude": ["node_modules", "tmp"]
 }
