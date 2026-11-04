@@ -1,0 +1,9 @@
+{
+  "name": "socket",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/socket/src",
+  "prefix": "rc",
+  "projectType": "library",
+  "tags": ["scope:shared", "type:lib", "platform:angular"],
+  "targets": {}
+}
