@@ -1,18 +1,21 @@
-/**
- * This is not a production server yet!
- * This is only a minimal backend to get started.
- */
-
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { API_GLOBAL_PREFIX } from '@realtime-chat/contracts';
 import { AppModule } from './app/app.module';
+import type { Env } from './config/env.schema';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const globalPrefix = 'api';
-  app.setGlobalPrefix(globalPrefix);
-  const port = process.env.PORT || 3000;
+  const config = app.get<ConfigService<Env, true>>(ConfigService);
+
+  app.setGlobalPrefix(API_GLOBAL_PREFIX);
+  app.enableCors({ origin: config.get('CORS_ORIGINS', { infer: true }) });
+  app.enableShutdownHooks();
+
+  const port = config.get('API_GATEWAY_PORT', { infer: true });
   await app.listen(port);
+
   // Set when Nx waits for this server to be ready
   if (process.env.NX_READY_SIGNAL_SOCKET) {
     try {
@@ -26,7 +29,7 @@ async function bootstrap() {
     }
   }
   Logger.log(
-    `🚀 Application is running on: http://localhost:${port}/${globalPrefix}`,
+    `API gateway listening on http://localhost:${port}/${API_GLOBAL_PREFIX}`,
   );
 }
 

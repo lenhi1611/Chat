@@ -28,6 +28,7 @@
     "@nx/webpack": "24.0.4",
     "@oxc-project/runtime": "^0.115.0",
     "@schematics/angular": "~22.2.0",
+    "@softarc/native-federation-orchestrator": "^4.8.0",
     "@swc-node/register": "1.11.1",
     "@swc/core": "1.15.8",
     "@swc/helpers": "0.5.18",
@@ -50,8 +51,7 @@
     "vitest": "^4.0.8",
     "webpack": "~5.110.0",
     "webpack-cli": "^7.0.0",
-    "webpack-dev-server": "^5.2.1",
-    "@softarc/native-federation-orchestrator": "^4.8.0"
+    "webpack-dev-server": "^5.2.1"
   },
   "packageManager": "npm@11.16.0",
   "allowScripts": {
@@ -71,11 +71,13 @@
     "@angular/platform-browser": "~22.2.0",
     "@angular/router": "~22.2.0",
     "@nestjs/common": "^12.3.2",
+    "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.3.2",
     "@nestjs/platform-express": "^12.3.2",
+    "es-module-shims": "^2.8.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "~7.8.0",
-    "es-module-shims": "^2.8.0"
+    "zod": "^4.6.7"
   },
   "overrides": {
     "@nx/nest": {
