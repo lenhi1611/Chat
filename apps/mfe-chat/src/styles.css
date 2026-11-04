@@ -1,1 +1,10 @@
-/* You can add global styles to this file, and also import other style files */
+/*
+ * Tailwind v4: no tailwind.config.js, configuration lives in CSS.
+ * `source(none)` disables automatic detection (which would scan the whole
+ * monorepo from the workspace root) in favour of explicit @source entries.
+ */
+@import 'tailwindcss' source(none);
+@import '../../../libs/shared/ui/src/styles/theme.css';
+
+/* This app's own templates. The shared UI library declares its own @source in theme.css. */
+@source './';

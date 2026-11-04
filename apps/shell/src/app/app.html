@@ -1,9 +1,13 @@
-<header>
-  <a routerLink="/">Realtime Chat</a>
-  <nav>
-    <a routerLink="/chat">Chat</a>
-  </nav>
+<header class="border-b bg-card">
+  <div class="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+    <a routerLink="/" class="font-semibold tracking-tight">Realtime Chat</a>
+    <nav class="flex gap-4 text-sm text-muted-foreground">
+      <a routerLink="/chat" routerLinkActive="text-foreground font-medium"
+        >Chat</a
+      >
+    </nav>
+  </div>
 </header>
-<main>
+<main class="mx-auto max-w-5xl px-4 py-8">
   <router-outlet />
 </main>
