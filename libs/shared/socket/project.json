@@ -4,6 +4,6 @@
   "sourceRoot": "libs/shared/socket/src",
   "prefix": "rc",
   "projectType": "library",
-  "tags": ["scope:shared", "type:lib", "platform:angular"],
+  "tags": ["scope:shared", "type:lib", "platform:angular", "access:shell-only"],
   "targets": {}
 }

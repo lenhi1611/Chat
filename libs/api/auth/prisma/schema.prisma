@@ -1,0 +1,52 @@
+// auth_db: users and their refresh tokens. Owned by libs/api/auth only.
+// Generated client: src/generated/prisma (git-ignored, `npm run db:generate`).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  // The api-gateway bundle is CommonJS; extensionless imports suit its bundler.
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// Lowercased before insert (see contracts emailField).
+  email        String   @unique
+  /// Lowercase [a-z0-9_]{3,20}; prefix search uses this unique index.
+  username     String   @unique
+  displayName  String   @map("display_name")
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// One row per issued refresh token. Rows of one login session share a
+/// familyId (= the `sid` claim of access tokens). Only a SHA-256 hash of the
+/// token is stored.
+model RefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  familyId     String    @map("family_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  /// Set when this token was rotated: the token that replaced it.
+  replacedById String?   @unique @map("replaced_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy RefreshToken? @relation("Rotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces   RefreshToken? @relation("Rotation")
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}

@@ -1,11 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { provideStore, Store } from '@ngrx/store';
-import { selectConnectionStatus } from '@realtime-chat/chat-data-access';
+
 import {
   CLIENT_ID_STORAGE,
   WEB_SOCKET_FACTORY,
   type WebSocketLike,
 } from '@realtime-chat/socket';
+import { selectConnectionStatus } from './chat.selectors';
 import { provideChatConnection } from './provide-chat-connection';
 
 describe('provideChatConnection', () => {

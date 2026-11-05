@@ -16,6 +16,9 @@ export default defineConfig(() => ({
     globals: true,
     environment: 'node',
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // Test databases and Redis (needs `npm run infra:up`).
+    globalSetup: ['./vitest.global-setup.mts'],
+    setupFiles: ['./src/test-setup.ts'],
     reporters: ['default'],
     coverage: {
       reportsDirectory: '../../coverage/apps/api-gateway',
