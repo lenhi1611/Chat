@@ -15,7 +15,11 @@
     "skipDefaultLibCheck": true,
     "paths": {
       "@realtime-chat/contracts": ["./libs/shared/contracts/src/index.ts"],
-      "@realtime-chat/ui": ["./libs/shared/ui/src/index.ts"]
+      "@realtime-chat/ui": ["./libs/shared/ui/src/index.ts"],
+      "@realtime-chat/socket": ["./libs/shared/socket/src/index.ts"],
+      "@realtime-chat/chat-data-access": [
+        "./libs/shared/chat-data-access/src/index.ts"
+      ]
     }
   },
   "exclude": ["node_modules", "tmp"]

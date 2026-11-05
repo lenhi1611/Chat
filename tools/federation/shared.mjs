@@ -23,20 +23,26 @@ export const sharedPackages = () =>
     '@angular/cdk': singleton,
     '@ng-icons/core': singleton,
 
-    // Phase 1: add state management + rxjs here with the same `singleton`
-    // config, e.g.
-    //   rxjs: singleton,
-    //   '@ngrx/store': singleton,
-    //   '@ngrx/effects': singleton,
-    //   '@ngrx/signals': singleton,
-    //
+    // State management. The shell owns the root Store, its effects and the
+    // single WebSocket; remotes inject that Store and read its Observables.
+    // Two copies of @ngrx/store would mean two `Store` DI tokens (the remote
+    // could not find the shell's); two copies of rxjs would break
+    // `instanceof Observable` and interop across the boundary.
+    rxjs: singleton,
+    '@ngrx/store': singleton,
+    '@ngrx/effects': singleton,
+    '@ngrx/entity': singleton,
+    '@ngrx/store-devtools': singleton,
+
     // No realtime client library needs sharing: the browser side talks to the
     // gateway through the native WebSocket API.
   });
 
 // Workspace libraries (@realtime-chat/*) from tsconfig.base.json `paths` are
 // shared automatically by Native Federation (default `sharedMappings`), so
-// shell and remotes get a single instance of @realtime-chat/ui.
+// shell and remotes get a single instance of @realtime-chat/ui,
+// @realtime-chat/socket (one ChatSocketService, one connection) and
+// @realtime-chat/chat-data-access (one set of actions/selectors/features).
 
 export const skip = [
   'rxjs/ajax',

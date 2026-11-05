@@ -10,15 +10,15 @@ import { ZardButtonComponent, ZardCardImports } from '@realtime-chat/ui';
     <z-card class="max-w-md" role="alert" data-testid="remote-unavailable">
       <z-card-header>
         <z-card-title
-          [zTitle]="'Không tải được mô-đun &quot;' + remoteName() + '&quot;'"
+          [zTitle]="'Could not load module &quot;' + remoteName() + '&quot;'"
         />
         <z-card-description
-          zDescription="Micro-frontend này hiện không phản hồi. Phần còn lại của ứng dụng vẫn hoạt động bình thường."
+          zDescription="This micro-frontend is not responding right now. The rest of the app still works."
         />
       </z-card-header>
       <z-card-footer class="gap-2">
-        <button z-button type="button" (click)="retry()">Thử lại</button>
-        <a z-button zType="outline" routerLink="/">Về trang chủ</a>
+        <button z-button type="button" (click)="retry()">Try again</button>
+        <a z-button zType="outline" routerLink="/">Back to home</a>
       </z-card-footer>
     </z-card>
   `,

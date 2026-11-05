@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ChatModule } from '../chat/chat.module';
 import { validateEnv } from '../config/env.schema';
 import { HealthModule } from '../health/health.module';
 
@@ -13,6 +14,7 @@ import { HealthModule } from '../health/health.module';
       validate: validateEnv,
     }),
     HealthModule,
+    ChatModule,
   ],
 })
 export class AppModule {}

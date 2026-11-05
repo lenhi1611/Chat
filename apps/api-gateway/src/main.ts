@@ -1,16 +1,12 @@
 import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { API_GLOBAL_PREFIX } from '@realtime-chat/contracts';
 import { AppModule } from './app/app.module';
-import type { Env } from './config/env.schema';
+import { configureApp } from './app/configure-app';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const config = app.get<ConfigService<Env, true>>(ConfigService);
-
-  app.setGlobalPrefix(API_GLOBAL_PREFIX);
-  app.enableCors({ origin: config.get('CORS_ORIGINS', { infer: true }) });
+  const config = configureApp(app);
   app.enableShutdownHooks();
 
   const port = config.get('API_GATEWAY_PORT', { infer: true });
@@ -29,7 +25,8 @@ async function bootstrap() {
     }
   }
   Logger.log(
-    `API gateway listening on http://localhost:${port}/${API_GLOBAL_PREFIX}`,
+    `API gateway listening on http://localhost:${port}/${API_GLOBAL_PREFIX}` +
+      ` (WebSocket: ws://localhost:${port}${config.get('WS_PATH', { infer: true })})`,
   );
 }
 
