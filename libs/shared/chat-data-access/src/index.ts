@@ -1,0 +1,18 @@
+// Public API of @realtime-chat/chat-data-access: providers, actions,
+// selectors and types. Reducers, effects and the socket stay internal.
+export { provideChatData } from './lib/provide-chat-data';
+export { ChatActions } from './lib/chat.actions';
+export {
+  selectClientId,
+  selectConnectionStatus,
+  selectIsConnected,
+  selectIsOwnMessage,
+  selectLastError,
+  selectMessages,
+  selectNickname,
+} from './lib/chat.selectors';
+export type {
+  ChatError,
+  ChatMessage,
+  ConnectionStatus,
+} from './lib/chat.models';
