@@ -9,6 +9,8 @@ export default defineConfig(() => ({
   test: {
     name: 'chat-data-access',
     watch: false,
+    // No spec files at the moment.
+    passWithNoTests: true,
     globals: true,
     environment: 'jsdom',
     setupFiles: ['src/test-setup.ts'],

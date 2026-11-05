@@ -11,8 +11,6 @@
     ]
   },
   "include": [
-    "vitest.global-setup.mts",
-    "src/test-setup.ts",
     "vite.config.ts",
     "vite.config.mts",
     "vitest.config.ts",
@@ -25,7 +23,6 @@
     "src/**/*.spec.js",
     "src/**/*.test.jsx",
     "src/**/*.spec.jsx",
-    "src/**/*.d.ts",
-    "src/testing/**/*.ts"
+    "src/**/*.d.ts"
   ]
 }

@@ -12,6 +12,8 @@ export default defineConfig(() => ({
   test: {
     name: 'api-redis',
     watch: false,
+    // No spec files at the moment.
+    passWithNoTests: true,
     globals: true,
     environment: 'node',
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
