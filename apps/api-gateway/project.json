@@ -55,7 +55,8 @@
       "options": {
         "passWithNoTests": true
       },
-      "dependsOn": ["^prisma-generate"]
+      "dependsOn": ["^prisma-generate"],
+      "parallelism": false
     },
     "build": {
       "dependsOn": ["^build", "^prisma-generate"]

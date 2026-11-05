@@ -37,8 +37,10 @@ const envObject = z.object({
     .enum(['development', 'production', 'test'])
     .default('development'),
   API_GATEWAY_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  /** Browser origins allowed by CORS (HTTP only; does not apply to WebSocket). */
-  CORS_ORIGINS: originList('http://localhost:4200'),
+  /** Browser origins allowed by CORS, with credentials (HTTP only; not WebSocket). */
+  CORS_ORIGINS: originList(
+    'http://localhost:4200,http://localhost:4201,http://localhost:4202',
+  ),
 
   /** Path of the WebSocket endpoint, served on the same port as HTTP. */
   WS_PATH: z

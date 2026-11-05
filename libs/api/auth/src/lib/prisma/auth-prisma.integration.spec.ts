@@ -4,7 +4,7 @@ import {
   createAuthTestPrisma,
   truncateAuthTables,
 } from '../../testing/auth-test-db';
-import type { AuthPrismaService } from './auth-prisma.service';
+import { AuthPrismaService } from './auth-prisma.service';
 
 describe('auth_db schema (integration)', () => {
   let prisma: AuthPrismaService;
@@ -25,6 +25,14 @@ describe('auth_db schema (integration)', () => {
         passwordHash: 'not-a-real-hash',
       },
     });
+
+  it('fails at startup when the database is unreachable', async () => {
+    const unreachable = new AuthPrismaService(
+      'postgresql://nobody:wrong@127.0.0.1:1/nothing?connect_timeout=2',
+    );
+    await expect(unreachable.onModuleInit()).rejects.toThrow();
+    await unreachable.onModuleDestroy();
+  });
 
   it('is migrated: every committed migration is applied', async () => {
     const rows = await prisma.$queryRaw<{ migration_name: string }[]>`

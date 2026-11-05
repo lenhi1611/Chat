@@ -13,7 +13,11 @@ describe('validateEnv', () => {
       ...required,
       NODE_ENV: 'development',
       API_GATEWAY_PORT: 3000,
-      CORS_ORIGINS: ['http://localhost:4200'],
+      CORS_ORIGINS: [
+        'http://localhost:4200',
+        'http://localhost:4201',
+        'http://localhost:4202',
+      ],
       WS_PATH: '/ws',
       WS_ALLOWED_ORIGINS: ['http://localhost:4200', 'http://localhost:4202'],
       WS_HEARTBEAT_MS: 30000,

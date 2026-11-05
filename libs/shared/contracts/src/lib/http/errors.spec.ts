@@ -31,3 +31,19 @@ describe('ApiError', () => {
     expect(isApiError(null)).toBe(false);
   });
 });
+
+describe('AppError', () => {
+  it('is an Error carrying an API code and optional details', async () => {
+    const { AppError } = await import('./app-error');
+    const error = new AppError('VALIDATION_FAILED', 'Invalid body', [
+      { path: 'email', message: 'Invalid email' },
+    ]);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      name: 'AppError',
+      code: 'VALIDATION_FAILED',
+      message: 'Invalid body',
+      details: [{ path: 'email', message: 'Invalid email' }],
+    });
+  });
+});

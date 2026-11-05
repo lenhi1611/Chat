@@ -23,9 +23,14 @@ export class ChatPrismaService
     super({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   }
 
-  /** Fail at startup, not on the first request, when the database is down. */
+  /**
+   * Fail at startup, not on the first request, when the database is down or
+   * the credentials are wrong. With a driver adapter `$connect()` alone opens
+   * no connection (the pg pool is lazy), so run a real query.
+   */
   async onModuleInit(): Promise<void> {
     await this.$connect();
+    await this.$queryRaw`SELECT 1`;
   }
 
   async onModuleDestroy(): Promise<void> {

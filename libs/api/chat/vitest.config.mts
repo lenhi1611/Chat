@@ -17,6 +17,9 @@ export default defineConfig(() => ({
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     // Creates and migrates chat_test once per run (needs `npm run infra:up`).
     globalSetup: ['./vitest.global-setup.mts'],
+    // Test files share one database and truncate it: run them one at a time.
+    // (Across projects, `parallelism: false` on the Nx test target does the same.)
+    fileParallelism: false,
     reporters: ['default'],
     coverage: {
       reportsDirectory: '../../../coverage/libs/api/chat',

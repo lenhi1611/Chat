@@ -4,7 +4,7 @@ import {
   createChatTestPrisma,
   truncateChatTables,
 } from '../../testing/chat-test-db';
-import type { ChatPrismaService } from './chat-prisma.service';
+import { ChatPrismaService } from './chat-prisma.service';
 
 describe('chat_db schema (integration)', () => {
   let prisma: ChatPrismaService;
@@ -32,6 +32,14 @@ describe('chat_db schema (integration)', () => {
   const isUniqueViolation = (error: unknown) =>
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === 'P2002';
+
+  it('fails at startup when the database is unreachable', async () => {
+    const unreachable = new ChatPrismaService(
+      'postgresql://nobody:wrong@127.0.0.1:1/nothing?connect_timeout=2',
+    );
+    await expect(unreachable.onModuleInit()).rejects.toThrow();
+    await unreachable.onModuleDestroy();
+  });
 
   it('is migrated', async () => {
     const rows = await prisma.$queryRaw<{ migration_name: string }[]>`
