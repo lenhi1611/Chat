@@ -1,5 +1,9 @@
-// Public API of @realtime-chat/api-chat (chat_db, conversations, messages).
+// Public API of @realtime-chat/api-chat: conversations and messages.
+// Prisma stays private to the chat domain.
 export {
-  CHAT_DATABASE_URL,
-  ChatPrismaService,
-} from './lib/prisma/chat-prisma.service';
+  ChatDomainModule,
+  type ChatDomainModuleAsyncOptions,
+} from './lib/chat-domain.module';
+export type { ChatModuleOptions } from './lib/chat.options';
+export { ChatService, type Created, type NewMessage } from './lib/chat.service';
+export { USERS_PORT, type UsersPort } from './lib/users.port';

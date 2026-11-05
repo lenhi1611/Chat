@@ -101,6 +101,13 @@ export async function withDb<T>(
   }
 }
 
+export const truncateChat = () =>
+  withDb(process.env['DATABASE_URL_CHAT'] ?? '', (db) =>
+    db.query(
+      'TRUNCATE TABLE messages, conversation_members, conversations RESTART IDENTITY CASCADE',
+    ),
+  );
+
 export const truncateAuth = () =>
   withDb(process.env['DATABASE_URL_AUTH'] ?? '', (db) =>
     db.query('TRUNCATE TABLE refresh_tokens, users RESTART IDENTITY CASCADE'),

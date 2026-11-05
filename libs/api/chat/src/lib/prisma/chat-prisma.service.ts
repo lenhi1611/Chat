@@ -3,12 +3,16 @@ import {
   Injectable,
   type OnModuleDestroy,
   type OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../../generated/prisma/client';
+import { type Prisma, PrismaClient } from '../../generated/prisma/client';
 
 /** Connection string of chat_db (provided by whoever imports the chat module). */
 export const CHAT_DATABASE_URL = Symbol('CHAT_DATABASE_URL');
+
+/** Optional Prisma log settings (tests count queries with `level: 'query'`). */
+export const CHAT_PRISMA_LOG = Symbol('CHAT_PRISMA_LOG');
 
 /**
  * Prisma client for chat_db. Only libs/api/chat may use it: other domains ask
@@ -19,8 +23,14 @@ export class ChatPrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  constructor(@Inject(CHAT_DATABASE_URL) databaseUrl: string) {
-    super({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  constructor(
+    @Inject(CHAT_DATABASE_URL) databaseUrl: string,
+    @Optional() @Inject(CHAT_PRISMA_LOG) log?: Prisma.LogDefinition[],
+  ) {
+    super({
+      adapter: new PrismaPg({ connectionString: databaseUrl }),
+      ...(log && { log }),
+    });
   }
 
   /**

@@ -2,10 +2,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AuthModule } from '@realtime-chat/api-auth';
+import { ChatDomainModule } from '@realtime-chat/api-chat';
 import { RedisModule } from '@realtime-chat/api-redis';
 import { AccessTokenGuard } from '../auth/access-token.guard';
 import { AuthHttpModule } from '../auth/auth-http.module';
 import { ChatModule } from '../chat/chat.module';
+import { AuthUsersAdapter } from '../conversations/auth-users.adapter';
+import { ConversationsHttpModule } from '../conversations/conversations-http.module';
 import { type Env, validateEnv } from '../config/env.schema';
 import { HealthModule } from '../health/health.module';
 import { ApiExceptionFilter } from '../http/api-exception.filter';
@@ -45,8 +48,18 @@ import { ApiExceptionFilter } from '../http/api-exception.filter';
         }),
       }),
     }),
+    // Chat domain (libs/api/chat), global; user summaries come from the auth
+    // domain through this app's adapter (the domains never import each other).
+    ChatDomainModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => ({
+        databaseUrl: config.get('DATABASE_URL_CHAT', { infer: true }),
+      }),
+      usersPort: AuthUsersAdapter,
+    }),
     HealthModule,
     AuthHttpModule,
+    ConversationsHttpModule,
     ChatModule,
   ],
   providers: [
