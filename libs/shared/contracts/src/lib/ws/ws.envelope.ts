@@ -78,12 +78,20 @@ export function parseEnvelope(
 
   const payload = schema.safeParse(data);
   if (!payload.success) {
+    // Lets the sender match the error to its pending message.
+    const clientMessageId =
+      event === WS_EVENTS.chatSend ? readClientMessageId(data) : undefined;
     if (event === WS_EVENTS.chatSend && isTextTooLong(payload.error)) {
-      return failure('MESSAGE_TOO_LONG', 'Message text is too long.');
+      return failure(
+        'MESSAGE_TOO_LONG',
+        'Message text is too long.',
+        clientMessageId,
+      );
     }
     return failure(
       'INVALID_PAYLOAD',
       `Invalid "${event}" payload: ${z.prettifyError(payload.error)}`,
+      clientMessageId,
     );
   }
 
@@ -99,9 +107,20 @@ function isTextTooLong(error: z.ZodError): boolean {
   );
 }
 
+const clientMessageIdOnly = z.object({ clientMessageId: z.uuid() });
+
+function readClientMessageId(data: unknown): string | undefined {
+  const result = clientMessageIdOnly.safeParse(data);
+  return result.success ? result.data.clientMessageId : undefined;
+}
+
 function failure(
   code: SystemErrorPayload['code'],
   message: string,
+  clientMessageId?: string,
 ): { ok: false; error: SystemErrorPayload } {
-  return { ok: false, error: { code, message } };
+  return {
+    ok: false,
+    error: { code, message, ...(clientMessageId && { clientMessageId }) },
+  };
 }

@@ -4,7 +4,7 @@ import type {
 } from '@realtime-chat/contracts';
 import type { ChatSocketState } from '@realtime-chat/socket';
 
-/** A chat message as broadcast by the server (id and sentAt are server-assigned). */
+/** A stored message as pushed by the server (id, seq and sentAt are server-assigned). */
 export type ChatMessage = ChatMessagePayload;
 
 export type ConnectionStatus = ChatSocketState;

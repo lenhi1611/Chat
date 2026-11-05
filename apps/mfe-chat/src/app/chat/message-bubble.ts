@@ -1,5 +1,10 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+} from '@angular/core';
 import type { ChatMessage } from '@realtime-chat/chat-data-access';
 
 /**
@@ -21,7 +26,7 @@ import type { ChatMessage } from '@realtime-chat/chat-data-access';
   template: `
     <span class="px-1 text-xs text-muted-foreground">
       <span data-testid="message-sender">{{
-        own() ? 'You' : message().senderNickname
+        own() ? 'You' : senderLabel()
       }}</span>
       ·
       <time [attr.datetime]="message().sentAt">{{
@@ -43,4 +48,12 @@ import type { ChatMessage } from '@realtime-chat/chat-data-access';
 export class MessageBubble {
   readonly message = input.required<ChatMessage>();
   readonly own = input(false);
+
+  /**
+   * Protocol v2 sends only the sender's id; names come from the conversation
+   * members once conversations reach the UI (phase 2, step 10).
+   */
+  protected readonly senderLabel = computed(
+    () => `User ${this.message().senderId.slice(0, 8)}`,
+  );
 }

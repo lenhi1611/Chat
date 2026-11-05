@@ -10,17 +10,16 @@ export const selectLastError = chatFeature.selectLastError;
 
 export const selectConnectionStatus = connectionFeature.selectStatus;
 export const selectIsConnected = connectionFeature.selectIsConnected;
-export const selectClientId = connectionFeature.selectClientId;
-export const selectNickname = connectionFeature.selectNickname;
+export const selectUserId = connectionFeature.selectUserId;
 
 /**
- * Predicate telling whether a message was sent by this client. A message is
- * "mine" when its senderId is the persisted clientId, so it stays mine across
- * reconnects and reloads.
+ * Predicate telling whether a message was sent by the signed-in user (its
+ * senderId is the userId of session.welcome), so it stays "mine" across
+ * reconnects, tabs and reloads.
  */
 export const selectIsOwnMessage = createSelector(
-  selectClientId,
-  (clientId) =>
+  selectUserId,
+  (userId) =>
     (message: Pick<ChatMessage, 'senderId'>): boolean =>
-      clientId !== null && message.senderId === clientId,
+      userId !== null && message.senderId === userId,
 );

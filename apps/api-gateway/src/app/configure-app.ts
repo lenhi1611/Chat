@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { WsTicketService } from '@realtime-chat/api-auth';
 import { API_GLOBAL_PREFIX } from '@realtime-chat/contracts';
 import cookieParser from 'cookie-parser';
 import { ChatWsAdapter } from '../chat/transport/chat-ws.adapter';
@@ -11,6 +12,7 @@ import type { Env } from '../config/env.schema';
  */
 export function configureApp(app: INestApplication): ConfigService<Env, true> {
   const config = app.get<ConfigService<Env, true>>(ConfigService);
+  const tickets = app.get(WsTicketService);
 
   app.setGlobalPrefix(API_GLOBAL_PREFIX);
   // credentials: the browser sends (and accepts) the refresh-token cookie on
@@ -26,6 +28,8 @@ export function configureApp(app: INestApplication): ConfigService<Env, true> {
     new ChatWsAdapter(app, {
       path: config.get('WS_PATH', { infer: true }),
       allowedOrigins: config.get('WS_ALLOWED_ORIGINS', { infer: true }),
+      // Sockets authenticate with a single-use ticket during the upgrade.
+      consumeTicket: (ticket) => tickets.consume(ticket),
     }),
   );
 

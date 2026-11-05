@@ -19,6 +19,7 @@ import {
   type ListMessagesResponse,
 } from '@realtime-chat/contracts';
 import type { Response } from 'express';
+import { ChatRealtimeService } from '../chat/chat-realtime.service';
 import {
   type AuthenticatedUser,
   CurrentUser,
@@ -28,7 +29,10 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe';
 /** Thin HTTP edge over ChatService (libs/api/chat): rules live there. */
 @Controller('conversations')
 export class ConversationsController {
-  constructor(private readonly chat: ChatService) {}
+  constructor(
+    private readonly chat: ChatService,
+    private readonly realtime: ChatRealtimeService,
+  ) {}
 
   /** The caller's conversations, most recent activity first. */
   @Get()
@@ -36,7 +40,10 @@ export class ConversationsController {
     return this.chat.listConversations(caller.userId);
   }
 
-  /** 201 when created; 200 when the DM already existed. */
+  /**
+   * 201 when created (and pushed to the members' sockets as
+   * conversation.created); 200 when the DM already existed.
+   */
   @Post()
   async create(
     @Body(new ZodValidationPipe(createConversationRequestSchema))
@@ -50,10 +57,17 @@ export class ConversationsController {
         body.userId,
       );
       response.status(created ? HttpStatus.CREATED : HttpStatus.OK);
+      if (created) this.realtime.conversationCreated(value);
       return value;
     }
+    const group = await this.chat.createGroup(
+      caller.userId,
+      body.name,
+      body.memberIds,
+    );
     response.status(HttpStatus.CREATED);
-    return this.chat.createGroup(caller.userId, body.name, body.memberIds);
+    this.realtime.conversationCreated(group);
+    return group;
   }
 
   /** Cursor pagination on seq: `?before=<seq>&limit=` (default 30, max 100). */

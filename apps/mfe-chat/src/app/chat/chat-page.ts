@@ -39,10 +39,11 @@ import { MessageList } from './message-list';
             connection is back.
           </p>
         }
-        <chat-message-composer
-          [enabled]="isConnected()"
-          (send)="send($event)"
-        />
+        <p class="text-xs text-muted-foreground" data-testid="upgrade-notice">
+          Sending is paused while chat moves to accounts and conversations.
+        </p>
+        <!-- Re-enabled with a selected conversation in phase 2, step 10. -->
+        <chat-message-composer [enabled]="false" />
       </z-card-footer>
     </z-card>
   `,
@@ -54,10 +55,6 @@ export class ChatPage {
   protected readonly isOwn = this.store.selectSignal(selectIsOwnMessage);
   protected readonly isConnected = this.store.selectSignal(selectIsConnected);
   protected readonly lastError = this.store.selectSignal(selectLastError);
-
-  protected send(text: string): void {
-    this.store.dispatch(ChatActions.sendMessage({ text }));
-  }
 
   protected dismissError(): void {
     this.store.dispatch(ChatActions.errorDismissed());

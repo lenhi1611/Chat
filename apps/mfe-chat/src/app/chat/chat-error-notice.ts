@@ -14,6 +14,8 @@ const MESSAGES: Record<ChatError['code'], string> = {
   MESSAGE_TOO_LONG: `Message is too long (max ${MAX_TEXT_LENGTH} characters).`,
   INVALID_PAYLOAD: 'Invalid message.',
   UNKNOWN_EVENT: 'The server did not understand the request.',
+  NOT_A_MEMBER: 'You are not a member of this conversation.',
+  SEND_FAILED: 'The message could not be sent. Please try again.',
 };
 
 /** Last chat error (server or local) with a dismiss button. */

@@ -77,8 +77,9 @@ export const send$ = createEffect(
   (actions$ = inject(Actions), socket = inject(ChatSocketService)) =>
     actions$.pipe(
       ofType(ChatActions.sendMessage),
-      mergeMap(({ text }): Observable<Action> => {
+      mergeMap(({ conversationId, text }): Observable<Action> => {
         const payload = chatSendPayloadSchema.safeParse({
+          conversationId,
           clientMessageId: crypto.randomUUID(),
           text,
         });
@@ -112,6 +113,8 @@ function eventToAction(envelope: ServerEnvelope): Action {
       return ChatActions.welcomeReceived(envelope.data);
     case WS_EVENTS.chatMessage:
       return ChatActions.messageReceived({ message: envelope.data });
+    case WS_EVENTS.conversationCreated:
+      return ChatActions.conversationCreated(envelope.data);
     case WS_EVENTS.systemError:
       return ChatActions.serverErrorReceived({
         error: { ...envelope.data, at: new Date().toISOString() },

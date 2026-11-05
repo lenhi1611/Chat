@@ -6,6 +6,7 @@ import {
   type LoginRequest,
   type RegisterRequest,
 } from '@realtime-chat/contracts';
+import { type Observable, Subject } from 'rxjs';
 import type { User } from '../generated/prisma/client';
 import { AccessTokenService } from './access-token.service';
 import { AUTH_OPTIONS, type AuthModuleOptions } from './auth.options';
@@ -52,6 +53,14 @@ class AlreadyRotated extends Error {}
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly ended = new Subject<EndedSession>();
+
+  /**
+   * Sessions that just ended (logout, or revoked after token reuse). The app
+   * closes their WebSockets. In-process for now (one gateway instance); a
+   * message bus later.
+   */
+  readonly sessionsEnded$: Observable<EndedSession> = this.ended.asObservable();
 
   constructor(
     @Inject(AUTH_OPTIONS) private readonly options: AuthModuleOptions,
@@ -108,6 +117,7 @@ export class AuthService {
         this.logger.warn(
           `Refresh token reuse detected: session ${current.familyId} of user ${current.userId} revoked`,
         );
+        this.ended.next({ userId: current.userId, sid: current.familyId });
       }
       throw invalidRefreshToken();
     }
@@ -161,7 +171,9 @@ export class AuthService {
     });
     if (!token) return null;
     await this.revokeFamily(token.familyId, new Date());
-    return { userId: token.userId, sid: token.familyId };
+    const session = { userId: token.userId, sid: token.familyId };
+    this.ended.next(session);
+    return session;
   }
 
   /** @throws AppError UNAUTHENTICATED when the user no longer exists */

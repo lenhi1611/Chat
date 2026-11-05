@@ -4,13 +4,12 @@ export { provideChatData } from './lib/provide-chat-data';
 export { provideChatConnection } from './lib/provide-chat-connection';
 export { ChatActions } from './lib/chat.actions';
 export {
-  selectClientId,
   selectConnectionStatus,
   selectIsConnected,
   selectIsOwnMessage,
   selectLastError,
   selectMessages,
-  selectNickname,
+  selectUserId,
 } from './lib/chat.selectors';
 export type {
   ChatError,
