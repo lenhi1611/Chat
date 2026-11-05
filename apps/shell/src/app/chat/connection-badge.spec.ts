@@ -36,7 +36,7 @@ describe('ConnectionBadge', () => {
 
   it('shows the connecting state without a nickname', async () => {
     const el = (await render()).nativeElement as HTMLElement;
-    expect(badge(el).textContent?.trim()).toBe('Đang kết nối…');
+    expect(badge(el).textContent?.trim()).toBe('Connecting…');
     expect(badge(el).dataset['status']).toBe('connecting');
     expect(el.querySelector('[data-testid="nickname"]')).toBeNull();
   });
@@ -49,7 +49,7 @@ describe('ConnectionBadge', () => {
     store.overrideSelector(selectNickname, 'guest-7f1c');
     store.refreshState();
     await fixture.whenStable();
-    expect(badge(el).textContent?.trim()).toBe('Đã kết nối');
+    expect(badge(el).textContent?.trim()).toBe('Connected');
     expect(el.querySelector('[data-testid="nickname"]')?.textContent).toContain(
       'guest-7f1c',
     );
@@ -57,7 +57,7 @@ describe('ConnectionBadge', () => {
     store.overrideSelector(selectConnectionStatus, 'reconnecting');
     store.refreshState();
     await fixture.whenStable();
-    expect(badge(el).textContent?.trim()).toBe('Đang kết nối lại…');
+    expect(badge(el).textContent?.trim()).toBe('Reconnecting…');
     expect(badge(el).dataset['status']).toBe('reconnecting');
   });
 });

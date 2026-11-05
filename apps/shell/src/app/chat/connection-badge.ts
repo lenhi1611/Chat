@@ -19,11 +19,11 @@ const STATUS_VIEW: Record<
   ConnectionStatus,
   { label: string; type: ZardBadgeTypeVariants }
 > = {
-  idle: { label: 'Chưa kết nối', type: 'secondary' },
-  connecting: { label: 'Đang kết nối…', type: 'secondary' },
-  open: { label: 'Đã kết nối', type: 'default' },
-  reconnecting: { label: 'Đang kết nối lại…', type: 'destructive' },
-  closed: { label: 'Đã ngắt kết nối', type: 'outline' },
+  idle: { label: 'Not connected', type: 'secondary' },
+  connecting: { label: 'Connecting…', type: 'secondary' },
+  open: { label: 'Connected', type: 'default' },
+  reconnecting: { label: 'Reconnecting…', type: 'destructive' },
+  closed: { label: 'Disconnected', type: 'outline' },
 };
 
 /** Header badge: live WebSocket status and the nickname given by the server. */

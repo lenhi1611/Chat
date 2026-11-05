@@ -46,6 +46,6 @@ describe('HomePage', () => {
       .error(new ProgressEvent('error'));
     await fixture.whenStable();
 
-    expect(fixture.nativeElement.textContent).toContain('Không kết nối được');
+    expect(fixture.nativeElement.textContent).toContain('Unreachable');
   });
 });

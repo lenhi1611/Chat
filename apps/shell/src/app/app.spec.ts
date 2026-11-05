@@ -27,6 +27,6 @@ describe('App', () => {
     expect(compiled.querySelector('a[href="/chat"]')).toBeTruthy();
     expect(
       compiled.querySelector('[data-testid="connection-status"]')?.textContent,
-    ).toContain('Đã kết nối');
+    ).toContain('Connected');
   });
 });

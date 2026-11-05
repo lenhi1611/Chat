@@ -23,9 +23,9 @@ export class HomePage {
 
   protected readonly apiStatus = computed(() => {
     if (this.health.isLoading())
-      return { label: 'Đang kiểm tra…', type: 'secondary' } as const;
+      return { label: 'Checking…', type: 'secondary' } as const;
     if (this.health.error())
-      return { label: 'Không kết nối được', type: 'destructive' } as const;
+      return { label: 'Unreachable', type: 'destructive' } as const;
     return {
       label: this.health.value()?.status ?? 'unknown',
       type: 'default',
