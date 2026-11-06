@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideMockStore } from '@ngrx/store/testing';
+import { selectCurrentUser } from '@realtime-chat/auth';
 import { selectConnectionStatus } from '@realtime-chat/chat-data-access';
 import { App } from './app';
 
@@ -11,7 +12,10 @@ describe('App', () => {
       providers: [
         provideRouter([]),
         provideMockStore({
-          selectors: [{ selector: selectConnectionStatus, value: 'open' }],
+          selectors: [
+            { selector: selectConnectionStatus, value: 'open' },
+            { selector: selectCurrentUser, value: null },
+          ],
         }),
       ],
     }).compileComponents();

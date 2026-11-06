@@ -18,6 +18,8 @@ export const AuthActions = createActionGroup({
     Logout: emptyProps(),
     /** A fresh access token (login, register or refresh). */
     'Session Established': props<{ response: AuthResponse }>(),
+    /** Login or register succeeded (after sessionEstablished): leave the form. */
+    'Signed In': emptyProps(),
     /** No session any more: forget the token and the user. */
     'Session Ended': props<{ reason: SessionEndReason }>(),
     'Error Cleared': emptyProps(),

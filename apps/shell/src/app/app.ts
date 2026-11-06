@@ -1,9 +1,16 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { UserMenu } from './auth/user-menu';
 import { ConnectionBadge } from './chat/connection-badge';
 
 @Component({
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ConnectionBadge],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    ConnectionBadge,
+    UserMenu,
+  ],
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',

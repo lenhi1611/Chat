@@ -11,7 +11,7 @@
     "db:migrate": "node tools/db/databases.mjs migrate",
     "db:reset": "node tools/db/databases.mjs reset",
     "db:test:ensure": "node tools/db/databases.mjs test:ensure",
-    "serve:all": "nx run-many -t serve -p shell mfe-chat api-gateway --parallel=5",
+    "serve:all": "nx run-many -t serve -p shell mfe-auth mfe-chat api-gateway --parallel=5",
     "lint": "nx run-many -t lint",
     "build": "nx run-many -t build",
     "test": "nx run-many -t test",
