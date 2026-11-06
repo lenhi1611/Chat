@@ -22,7 +22,8 @@
       ],
       "@realtime-chat/api-auth": ["./libs/api/auth/src/index.ts"],
       "@realtime-chat/api-chat": ["./libs/api/chat/src/index.ts"],
-      "@realtime-chat/api-redis": ["./libs/api/redis/src/index.ts"]
+      "@realtime-chat/api-redis": ["./libs/api/redis/src/index.ts"],
+      "@realtime-chat/auth": ["./libs/shared/auth/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
