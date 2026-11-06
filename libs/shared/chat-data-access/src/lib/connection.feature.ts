@@ -25,6 +25,8 @@ export const connectionFeature = createFeature({
       ...state,
       userId,
     })),
+    // The status is the socket's (already `closed` by then): keep it.
+    on(ChatActions.stateReset, (state) => ({ ...state, userId: null })),
   ),
   extraSelectors: ({ selectStatus }) => ({
     selectIsConnected: createSelector(

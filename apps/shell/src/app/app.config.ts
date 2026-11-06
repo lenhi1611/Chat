@@ -33,6 +33,10 @@ export const appConfig: ApplicationConfig = {
     }),
     // Session: silent refresh at startup, token in memory, guards, interceptor.
     provideAuth({ apiBaseUrl: environment.apiBaseUrl }),
-    provideChatConnection(environment.wsUrl),
+    // The chat socket follows the session: it connects once signed in.
+    provideChatConnection({
+      wsUrl: environment.wsUrl,
+      apiBaseUrl: environment.apiBaseUrl,
+    }),
   ],
 };

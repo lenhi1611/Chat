@@ -5,7 +5,7 @@ import {
   selectIsConnected,
   selectIsOwnMessage,
   selectLastError,
-  selectMessages,
+  selectSelectedMessages,
 } from '@realtime-chat/chat-data-access';
 import { ZardCardImports } from '@realtime-chat/ui';
 import { ChatErrorNotice } from './chat-error-notice';
@@ -51,7 +51,7 @@ import { MessageList } from './message-list';
 export class ChatPage {
   private readonly store = inject(Store);
 
-  protected readonly messages = this.store.selectSignal(selectMessages);
+  protected readonly messages = this.store.selectSignal(selectSelectedMessages);
   protected readonly isOwn = this.store.selectSignal(selectIsOwnMessage);
   protected readonly isConnected = this.store.selectSignal(selectIsConnected);
   protected readonly lastError = this.store.selectSignal(selectLastError);

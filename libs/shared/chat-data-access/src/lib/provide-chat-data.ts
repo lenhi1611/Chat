@@ -4,22 +4,30 @@ import {
 } from '@angular/core';
 import { provideEffects } from '@ngrx/effects';
 import { provideState } from '@ngrx/store';
+import { CHAT_API_BASE_URL, ChatApiService } from './chat-api.service';
 import { chatEffects } from './chat.effects';
 import { chatFeature } from './chat.feature';
 import { connectionFeature } from './connection.feature';
+import { conversationsEffects } from './conversations.effects';
+import { conversationsFeature } from './conversations.feature';
+import { messagesFeature } from './messages.feature';
 
 /**
- * Registers the chat state (connection + messages) and its effects.
+ * Registers the chat state (connection, conversations, histories, errors),
+ * its effects and REST client.
  *
- * Call it ONCE, at the root of the application that owns the connection: the
- * shell (or mfe-chat when it runs standalone). Requires `provideStore()` and
- * `provideChatSocket({ url })` in the same application. Remotes loaded by the
- * shell must not call it again: they share the shell's Store.
+ * Called by provideChatConnection, ONCE, at the root of the application that
+ * owns the connection. Remotes loaded by the shell must not call it again:
+ * they share the shell's Store.
  */
-export function provideChatData(): EnvironmentProviders {
+export function provideChatData(apiBaseUrl: string): EnvironmentProviders {
   return makeEnvironmentProviders([
+    { provide: CHAT_API_BASE_URL, useValue: apiBaseUrl.replace(/\/+$/, '') },
+    ChatApiService,
     provideState(connectionFeature),
+    provideState(conversationsFeature),
+    provideState(messagesFeature),
     provideState(chatFeature),
-    provideEffects(chatEffects),
+    provideEffects(chatEffects, conversationsEffects),
   ]);
 }
