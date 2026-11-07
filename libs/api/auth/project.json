@@ -21,7 +21,8 @@
       }
     },
     "test": {
-      "dependsOn": ["prisma-generate"]
+      "dependsOn": ["prisma-generate"],
+      "parallelism": false
     },
     "lint": {
       "dependsOn": ["prisma-generate"]
