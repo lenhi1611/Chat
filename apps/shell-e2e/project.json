@@ -3,16 +3,8 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "sourceRoot": "apps/shell-e2e/src",
-  "tags": [
-    "scope:e2e",
-    "type:e2e"
-  ],
-  "implicitDependencies": [
-    "shell",
-    "mfe-auth",
-    "mfe-chat",
-    "api-gateway"
-  ],
+  "tags": ["scope:e2e", "type:e2e"],
+  "implicitDependencies": ["shell", "mfe-auth", "mfe-chat", "api-gateway"],
   "targets": {
     "e2e": {
       "// dependsOn": "Playwright's webServer starts the servers (or reuses running ones, e.g. npm run serve:all); Nx's inferred serve dependencies would start a second set on the same ports.",
