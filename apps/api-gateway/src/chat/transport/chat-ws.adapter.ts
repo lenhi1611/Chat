@@ -1,7 +1,7 @@
 import { type INestApplicationContext, Logger } from '@nestjs/common';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { parseClientFrame } from './client-frame-parser';
-import { createUpgradeVerifier } from './upgrade-verifier';
+import { createUpgradeVerifier, type TicketConsumer } from './upgrade-verifier';
 
 /**
  * Largest frame `ws` accepts; bigger ones close the connection with 1009.
@@ -13,6 +13,8 @@ export const WS_MAX_PAYLOAD_BYTES = 8 * 1024;
 export interface ChatWsAdapterOptions {
   path: string;
   allowedOrigins: readonly string[];
+  /** Ticket → owner, single use (the auth domain's WsTicketService). */
+  consumeTicket: TicketConsumer;
   maxPayloadBytes?: number;
 }
 
@@ -40,6 +42,7 @@ export class ChatWsAdapter extends WsAdapter {
       maxPayload: this.settings.maxPayloadBytes ?? WS_MAX_PAYLOAD_BYTES,
       verifyClient: createUpgradeVerifier(
         this.settings.allowedOrigins,
+        this.settings.consumeTicket,
         this.upgradeLogger,
       ),
     });

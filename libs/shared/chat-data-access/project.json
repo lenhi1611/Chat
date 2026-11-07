@@ -4,7 +4,7 @@
   "sourceRoot": "libs/shared/chat-data-access/src",
   "prefix": "rc",
   "projectType": "library",
-  "tags": ["scope:shared", "type:lib", "platform:angular"],
+  "tags": ["scope:shared", "type:lib", "platform:angular", "access:public"],
   "// targets": "to see all targets run: nx show project chat-data-access --web",
   "targets": {}
 }

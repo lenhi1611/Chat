@@ -1,0 +1,122 @@
+{
+  "name": "mfe-auth",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "prefix": "auth",
+  "sourceRoot": "apps/mfe-auth/src",
+  "tags": ["scope:mfe", "type:app", "platform:angular"],
+  "targets": {
+    "build": {
+      "executor": "@angular-architects/native-federation:build",
+      "defaultConfiguration": "production",
+      "options": {
+        "cacheExternalArtifacts": true,
+        "tsConfig": "apps/mfe-auth/tsconfig.federation.json"
+      },
+      "configurations": {
+        "production": {
+          "target": "mfe-auth:esbuild:production"
+        },
+        "development": {
+          "target": "mfe-auth:esbuild:development",
+          "dev": true
+        }
+      },
+      "outputs": ["{workspaceRoot}/dist/apps/mfe-auth"],
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": [
+        "production",
+        "^production",
+        "{projectRoot}/federation.config.mjs",
+        "{workspaceRoot}/tools/federation/**/*"
+      ]
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@angular-architects/native-federation:build",
+      "options": {
+        "target": "mfe-auth:serve-original:development",
+        "tsConfig": "apps/mfe-auth/tsconfig.federation.json",
+        "rebuildDelay": 500,
+        "cacheExternalArtifacts": true,
+        "dev": true,
+        "devServer": true,
+        "port": 0
+      }
+    },
+    "serve-static": {
+      "continuous": true,
+      "readyWhen": {
+        "signal": true
+      },
+      "dependsOn": ["build"],
+      "executor": "@nx/web:file-server",
+      "options": {
+        "buildTarget": "mfe-auth:build",
+        "port": 4201,
+        "staticFilePath": "dist/apps/mfe-auth/browser",
+        "spa": true
+      }
+    },
+    "esbuild": {
+      "executor": "@angular/build:application",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "outputPath": "dist/apps/mfe-auth",
+        "browser": "apps/mfe-auth/src/main.ts",
+        "tsConfig": "apps/mfe-auth/tsconfig.app.json",
+        "assets": [
+          {
+            "glob": "**/*",
+            "input": "apps/mfe-auth/public"
+          }
+        ],
+        "styles": ["apps/mfe-auth/src/styles.css"],
+        "polyfills": ["es-module-shims"]
+      },
+      "configurations": {
+        "production": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "500kb",
+              "maximumError": "1mb"
+            },
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "4kb",
+              "maximumError": "8kb"
+            }
+          ],
+          "outputHashing": "all"
+        },
+        "development": {
+          "optimization": false,
+          "extractLicenses": false,
+          "sourceMap": true
+        }
+      }
+    },
+    "serve-original": {
+      "continuous": true,
+      "readyWhen": {
+        "signal": true
+      },
+      "executor": "@angular/build:dev-server",
+      "defaultConfiguration": "development",
+      "options": {
+        "port": 4201
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "mfe-auth:esbuild:production"
+        },
+        "development": {
+          "buildTarget": "mfe-auth:esbuild:development"
+        }
+      }
+    }
+  }
+}

@@ -8,9 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import type { ServerEnvelope } from '@realtime-chat/contracts';
 import { WebSocket } from 'ws';
 import type { Env } from '../config/env.schema';
-
-/** The single shared room of phase 1. Rooms become real in a later phase. */
-export const LOBBY_ROOM_ID = 'lobby';
+import type { SocketOwner } from './transport/upgrade-verifier';
 
 /** RFC 6455 close code "going away": the server is shutting down. */
 export const CLOSE_GOING_AWAY = 1001;
@@ -18,30 +16,77 @@ export const CLOSE_GOING_AWAY = 1001;
 /** How long shutdown waits for clients to acknowledge the close frame. */
 const SHUTDOWN_GRACE_MS = 1000;
 
-export interface ConnectionInfo {
-  clientId: string;
-  nickname: string;
-  roomId: string;
+export interface ConnectionInfo extends SocketOwner {
+  /** Conversations (rooms) this socket receives messages of. */
+  conversationIds: Set<string>;
   connectedAt: Date;
   /** Heartbeat flag: cleared on each ping, set again by the client's pong. */
   isAlive: boolean;
 }
 
+/** Map of key → set of sockets, dropping a key when its set gets empty. */
+class SocketIndex {
+  private readonly map = new Map<string, Set<WebSocket>>();
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  add(key: string, socket: WebSocket): void {
+    let sockets = this.map.get(key);
+    if (!sockets) {
+      sockets = new Set();
+      this.map.set(key, sockets);
+    }
+    sockets.add(socket);
+  }
+
+  delete(key: string, socket: WebSocket): void {
+    const sockets = this.map.get(key);
+    if (!sockets) return;
+    sockets.delete(socket);
+    if (sockets.size === 0) this.map.delete(key);
+  }
+
+  get(key: string): ReadonlySet<WebSocket> {
+    return this.map.get(key) ?? new Set();
+  }
+}
+
 /**
- * Open connections of this gateway instance, plus the heartbeat that removes
- * dead ones. In-memory: with several gateway instances each one only knows its
- * own clients (fan-out across instances is out of scope for phase 1).
+ * Open sockets of this gateway instance, indexed by user, login session and
+ * conversation, plus the heartbeat that removes dead ones. A user may have
+ * several sockets (tabs). In-memory: with several gateway instances each one
+ * only knows its own sockets (cross-instance fan-out is phase 5).
  */
 @Injectable()
 export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ConnectionRegistry.name);
   private readonly connections = new Map<WebSocket, ConnectionInfo>();
+  private readonly byUser = new SocketIndex();
+  private readonly bySession = new SocketIndex();
+  private readonly byConversation = new SocketIndex();
   private heartbeat?: NodeJS.Timeout;
 
   constructor(private readonly config: ConfigService<Env, true>) {}
 
   get size(): number {
     return this.connections.size;
+  }
+
+  /** Sizes of every index: all zero once every socket is gone (no leak). */
+  stats(): {
+    sockets: number;
+    users: number;
+    sessions: number;
+    conversations: number;
+  } {
+    return {
+      sockets: this.connections.size,
+      users: this.byUser.size,
+      sessions: this.bySession.size,
+      conversations: this.byConversation.size,
+    };
   }
 
   onModuleInit(): void {
@@ -52,9 +97,8 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     clearInterval(this.heartbeat);
-    const sockets = [...this.connections.keys()];
     await Promise.all(
-      sockets.map((socket) => {
+      [...this.connections.keys()].map((socket) => {
         const closed = waitForClose(socket, SHUTDOWN_GRACE_MS);
         socket.close(CLOSE_GOING_AWAY, 'Server shutting down');
         return closed;
@@ -62,17 +106,17 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  add(
-    socket: WebSocket,
-    identity: Pick<ConnectionInfo, 'clientId' | 'nickname'>,
-  ): ConnectionInfo {
+  add(socket: WebSocket, owner: SocketOwner): ConnectionInfo {
     const info: ConnectionInfo = {
-      ...identity,
-      roomId: LOBBY_ROOM_ID,
+      userId: owner.userId,
+      sid: owner.sid,
+      conversationIds: new Set(),
       connectedAt: new Date(),
       isAlive: true,
     };
     this.connections.set(socket, info);
+    this.byUser.add(info.userId, socket);
+    this.bySession.add(info.sid, socket);
     socket.on('pong', () => {
       info.isAlive = true;
     });
@@ -83,10 +127,36 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
     return this.connections.get(socket);
   }
 
+  /** Unregisters a socket from every index. */
   remove(socket: WebSocket): ConnectionInfo | undefined {
     const info = this.connections.get(socket);
+    if (!info) return undefined;
     this.connections.delete(socket);
+    this.byUser.delete(info.userId, socket);
+    this.bySession.delete(info.sid, socket);
+    for (const conversationId of info.conversationIds) {
+      this.byConversation.delete(conversationId, socket);
+    }
     return info;
+  }
+
+  /** Subscribes one socket to conversations (ignored if it has gone). */
+  join(socket: WebSocket, conversationIds: Iterable<string>): void {
+    const info = this.connections.get(socket);
+    if (!info) return;
+    for (const conversationId of conversationIds) {
+      info.conversationIds.add(conversationId);
+      this.byConversation.add(conversationId, socket);
+    }
+  }
+
+  /** Subscribes every open socket of these users to a conversation. */
+  joinUsers(conversationId: string, userIds: Iterable<string>): void {
+    for (const userId of userIds) {
+      for (const socket of this.byUser.get(userId)) {
+        this.join(socket, [conversationId]);
+      }
+    }
   }
 
   send(socket: WebSocket, envelope: ServerEnvelope): void {
@@ -95,12 +165,26 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Sends one frame to every open connection in a room; returns the count. */
-  broadcast(roomId: string, envelope: ServerEnvelope): number {
+  /** One frame to every open socket in a conversation; returns the count. */
+  sendToConversation(conversationId: string, envelope: ServerEnvelope): number {
+    return this.sendToAll(this.byConversation.get(conversationId), envelope);
+  }
+
+  /** Closes every socket of a login session; returns the count. */
+  closeSession(sid: string, code: number, reason: string): number {
+    const sockets = [...this.bySession.get(sid)];
+    for (const socket of sockets) socket.close(code, reason);
+    return sockets.length;
+  }
+
+  private sendToAll(
+    sockets: Iterable<WebSocket>,
+    envelope: ServerEnvelope,
+  ): number {
     const frame = JSON.stringify(envelope);
     let delivered = 0;
-    for (const [socket, info] of this.connections) {
-      if (info.roomId === roomId && socket.readyState === WebSocket.OPEN) {
+    for (const socket of sockets) {
+      if (socket.readyState === WebSocket.OPEN) {
         socket.send(frame);
         delivered++;
       }
@@ -116,7 +200,9 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
   private checkHeartbeats(): void {
     for (const [socket, info] of this.connections) {
       if (!info.isAlive) {
-        this.logger.warn(`Terminating unresponsive client ${info.nickname}`);
+        this.logger.warn(
+          `Terminating unresponsive socket of user ${info.userId}`,
+        );
         socket.terminate();
         continue;
       }

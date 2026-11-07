@@ -13,8 +13,13 @@ import { ZardButtonComponent, ZardInputComponent } from '@realtime-chat/ui';
 const COUNTER_FROM = MAX_TEXT_LENGTH - 200;
 
 /**
- * Single-line message input. Enter (form submit) sends. Emits the trimmed
- * text and clears itself; it does not talk to the store.
+ * Single-line message input. Enter or "Send" sends. Emits the trimmed text
+ * and clears itself; it does not talk to the store.
+ *
+ * Enter is handled here, not left to the form's implicit submission: the
+ * browser skips that while the submit button is disabled, and the button
+ * only re-enables on the next change detection. Typing fast right after a
+ * send (draft just cleared, button still disabled) would drop the message.
  */
 @Component({
   selector: 'chat-message-composer',
@@ -37,6 +42,7 @@ const COUNTER_FROM = MAX_TEXT_LENGTH - 200;
           data-testid="composer-input"
           [value]="draft()"
           (valueChange)="draft.set($event?.toString() ?? '')"
+          (keydown.enter)="onEnter($event)"
           [attr.aria-invalid]="tooLong() || null"
         />
         @if (showCounter()) {
@@ -75,6 +81,12 @@ export class MessageComposer {
   protected readonly canSend = computed(
     () => this.enabled() && this.length() > 0 && !this.tooLong(),
   );
+
+  /** Enter that confirms an IME composition (e.g. Vietnamese) is not a send. */
+  protected onEnter(event: Event): void {
+    if ((event as KeyboardEvent).isComposing) return;
+    this.submit(event);
+  }
 
   protected submit(event: Event): void {
     event.preventDefault();

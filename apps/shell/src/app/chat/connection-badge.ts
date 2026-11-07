@@ -8,7 +8,6 @@ import { Store } from '@ngrx/store';
 import {
   type ConnectionStatus,
   selectConnectionStatus,
-  selectNickname,
 } from '@realtime-chat/chat-data-access';
 import {
   ZardBadgeComponent,
@@ -26,18 +25,13 @@ const STATUS_VIEW: Record<
   closed: { label: 'Disconnected', type: 'outline' },
 };
 
-/** Header badge: live WebSocket status and the nickname given by the server. */
+/** Header badge: live WebSocket status. */
 @Component({
   selector: 'app-connection-badge',
   imports: [ZardBadgeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <span class="flex items-center gap-2 text-sm">
-      @if (nickname(); as name) {
-        <span class="text-muted-foreground" data-testid="nickname">{{
-          name
-        }}</span>
-      }
       <z-badge
         [zType]="view().type"
         [attr.data-status]="status()"
@@ -53,6 +47,5 @@ export class ConnectionBadge {
   private readonly store = inject(Store);
 
   protected readonly status = this.store.selectSignal(selectConnectionStatus);
-  protected readonly nickname = this.store.selectSignal(selectNickname);
   protected readonly view = computed(() => STATUS_VIEW[this.status()]);
 }

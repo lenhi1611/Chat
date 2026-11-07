@@ -1,0 +1,9 @@
+{
+  "name": "api-redis",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/api/redis/src",
+  "projectType": "library",
+  "tags": ["scope:api", "type:lib", "platform:node", "domain:infra"],
+  "// targets": "to see all targets run: nx show project api-redis --web",
+  "targets": {}
+}

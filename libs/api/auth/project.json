@@ -1,0 +1,30 @@
+{
+  "name": "api-auth",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/api/auth/src",
+  "projectType": "library",
+  "tags": ["scope:api", "type:lib", "platform:node", "domain:auth"],
+  "targets": {
+    "prisma-generate": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/prisma/schema.prisma",
+        "{projectRoot}/prisma.config.ts",
+        {
+          "externalDependencies": ["prisma"]
+        }
+      ],
+      "outputs": ["{projectRoot}/src/generated"],
+      "options": {
+        "command": "prisma generate --config libs/api/auth/prisma.config.ts"
+      }
+    },
+    "test": {
+      "dependsOn": ["prisma-generate"]
+    },
+    "lint": {
+      "dependsOn": ["prisma-generate"]
+    }
+  }
+}

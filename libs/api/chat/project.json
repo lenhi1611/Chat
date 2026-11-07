@@ -1,0 +1,30 @@
+{
+  "name": "api-chat",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/api/chat/src",
+  "projectType": "library",
+  "tags": ["scope:api", "type:lib", "platform:node", "domain:chat"],
+  "targets": {
+    "prisma-generate": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/prisma/schema.prisma",
+        "{projectRoot}/prisma.config.ts",
+        {
+          "externalDependencies": ["prisma"]
+        }
+      ],
+      "outputs": ["{projectRoot}/src/generated"],
+      "options": {
+        "command": "prisma generate --config libs/api/chat/prisma.config.ts"
+      }
+    },
+    "test": {
+      "dependsOn": ["prisma-generate"]
+    },
+    "lint": {
+      "dependsOn": ["prisma-generate"]
+    }
+  }
+}

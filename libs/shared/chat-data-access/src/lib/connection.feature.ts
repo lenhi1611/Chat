@@ -4,15 +4,13 @@ import type { ConnectionStatus } from './chat.models';
 
 export interface ConnectionState {
   status: ConnectionStatus;
-  /** Known once the server has sent `session.welcome`. */
-  clientId: string | null;
-  nickname: string | null;
+  /** The authenticated user, known once the server has sent `session.welcome`. */
+  userId: string | null;
 }
 
 export const initialConnectionState: ConnectionState = {
   status: 'idle',
-  clientId: null,
-  nickname: null,
+  userId: null,
 };
 
 export const connectionFeature = createFeature({
@@ -23,11 +21,12 @@ export const connectionFeature = createFeature({
       ...state,
       status,
     })),
-    on(ChatActions.welcomeReceived, (state, { clientId, nickname }) => ({
+    on(ChatActions.welcomeReceived, (state, { userId }) => ({
       ...state,
-      clientId,
-      nickname,
+      userId,
     })),
+    // The status is the socket's (already `closed` by then): keep it.
+    on(ChatActions.stateReset, (state) => ({ ...state, userId: null })),
   ),
   extraSelectors: ({ selectStatus }) => ({
     selectIsConnected: createSelector(

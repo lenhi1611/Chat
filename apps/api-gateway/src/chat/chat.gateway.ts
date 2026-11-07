@@ -1,6 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
-import { Logger } from '@nestjs/common';
+import {
+  Logger,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -9,53 +12,101 @@ import {
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
+import { AuthService } from '@realtime-chat/api-auth';
+import { ChatService } from '@realtime-chat/api-chat';
 import {
+  AppError,
   type ChatSendPayload,
   createEnvelope,
   type ServerEnvelope,
   type SystemErrorPayload,
+  WS_CLOSE_CODES,
   WS_EVENTS,
 } from '@realtime-chat/contracts';
+import type { Subscription } from 'rxjs';
 import type { WebSocket } from 'ws';
 import { ConnectionRegistry } from './connection-registry';
-import { nicknameFor } from './nickname';
 import { INVALID_FRAME_EVENT } from './transport/client-frame-parser';
-import { readClientId } from './transport/upgrade-verifier';
+import { getSocketOwner } from './transport/upgrade-verifier';
 
 /** RFC 6455 close code "policy violation". */
 const CLOSE_POLICY_VIOLATION = 1008;
 
 /**
- * Chat over plain WebSocket. Path, payload limit and upgrade checks come from
- * ChatWsAdapter; frames reaching the handlers below are already validated
- * against the shared protocol (see client-frame-parser.ts).
+ * Authenticated chat over plain WebSocket. Path, payload limit and the ticket
+ * check come from ChatWsAdapter; frames reaching the handlers below are
+ * already validated against the shared protocol (client-frame-parser.ts).
  *
  * Message contents are never logged.
  */
 @WebSocketGateway()
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleInit,
+    OnModuleDestroy
+{
   private readonly logger = new Logger(ChatGateway.name);
+  private sessionsEnded?: Subscription;
+  /** Tail of each socket's chat.send queue (see handleChatSend). */
+  private readonly sendQueues = new WeakMap<WebSocket, Promise<unknown>>();
 
-  constructor(private readonly connections: ConnectionRegistry) {}
+  constructor(
+    private readonly connections: ConnectionRegistry,
+    private readonly chat: ChatService,
+    private readonly auth: AuthService,
+  ) {}
 
-  handleConnection(socket: WebSocket, request: IncomingMessage): void {
-    // Already enforced during the upgrade; kept as a guard for other adapters.
-    const clientId = readClientId(request.url);
-    if (!clientId) {
-      socket.close(CLOSE_POLICY_VIOLATION, 'Invalid clientId');
+  /** Logout (or a revoked session) closes that session's sockets with 4401. */
+  onModuleInit(): void {
+    this.sessionsEnded = this.auth.sessionsEnded$.subscribe(({ sid }) => {
+      const closed = this.connections.closeSession(
+        sid,
+        WS_CLOSE_CODES.sessionEnded,
+        'Session ended',
+      );
+      if (closed > 0)
+        this.logger.log(`Closed ${closed} socket(s) of ended session ${sid}`);
+    });
+  }
+
+  onModuleDestroy(): void {
+    this.sessionsEnded?.unsubscribe();
+  }
+
+  async handleConnection(
+    socket: WebSocket,
+    request: IncomingMessage,
+  ): Promise<void> {
+    // Always set by the upgrade verifier; kept as a guard for other adapters.
+    const owner = getSocketOwner(request);
+    if (!owner) {
+      socket.close(CLOSE_POLICY_VIOLATION, 'Not authenticated');
       return;
     }
-
-    const { nickname } = this.connections.add(socket, {
-      clientId,
-      nickname: nicknameFor(clientId),
-    });
+    // Registered before any await: frames, pongs and logout reach it at once.
+    this.connections.add(socket, owner);
+    try {
+      // Every room of the user, in one query.
+      this.connections.join(
+        socket,
+        await this.chat.getConversationIdsForUser(owner.userId),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Could not load rooms of user ${owner.userId}: ${error instanceof Error ? error.message : error}`,
+      );
+      socket.close(1011, 'Try again');
+      return;
+    }
+    // Welcome last: once it arrives, the client receives all its conversations.
     this.connections.send(
       socket,
-      createEnvelope(WS_EVENTS.sessionWelcome, { clientId, nickname }),
+      createEnvelope(WS_EVENTS.sessionWelcome, { userId: owner.userId }),
     );
     this.logger.log(
-      `Connected: ${nickname} (${this.connections.size} connected)`,
+      `Connected: user ${owner.userId} (${this.connections.size} sockets)`,
     );
   }
 
@@ -63,36 +114,94 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const info = this.connections.remove(socket);
     if (info) {
       this.logger.log(
-        `Disconnected: ${info.nickname} (${this.connections.size} connected)`,
+        `Disconnected: user ${info.userId} (${this.connections.size} sockets)`,
       );
     }
   }
 
+  /**
+   * Validate (parser) → member? → store (seq) → broadcast to every socket of
+   * every member, sender included. Failures answer the sender only, with its
+   * clientMessageId; the connection stays open.
+   *
+   * One socket's frames are handled one after another: run concurrently, the
+   * transactions would commit (and take their `seq`) in any order, so quick
+   * successive messages would be stored out of the order they were typed.
+   * Different sockets still run in parallel.
+   */
   @SubscribeMessage(WS_EVENTS.chatSend)
   handleChatSend(
     @ConnectedSocket() socket: WebSocket,
     @MessageBody() payload: ChatSendPayload,
-  ): void {
-    const sender = this.connections.get(socket);
-    if (!sender) return;
-
-    // The server is the source of truth for id and sentAt.
-    this.connections.broadcast(
-      sender.roomId,
-      createEnvelope(WS_EVENTS.chatMessage, {
-        id: randomUUID(),
-        clientMessageId: payload.clientMessageId,
-        senderId: sender.clientId,
-        senderNickname: sender.nickname,
-        text: payload.text,
-        sentAt: new Date().toISOString(),
-      }),
+  ): Promise<ServerEnvelope | undefined> {
+    const previous = this.sendQueues.get(socket) ?? Promise.resolve();
+    const result = previous.then(() => this.processChatSend(socket, payload));
+    // processChatSend answers errors itself; the catch only keeps the chain
+    // alive if something unexpected throws.
+    this.sendQueues.set(
+      socket,
+      result.catch(() => undefined),
     );
+    return result;
   }
 
-  /** Replies to the offending client only; the connection stays open. */
+  private async processChatSend(
+    socket: WebSocket,
+    payload: ChatSendPayload,
+  ): Promise<ServerEnvelope | undefined> {
+    const sender = this.connections.get(socket);
+    if (!sender) return undefined;
+    try {
+      const { value: message, created } = await this.chat.saveMessage({
+        senderId: sender.userId,
+        conversationId: payload.conversationId,
+        clientMessageId: payload.clientMessageId,
+        text: payload.text,
+      });
+      // Membership is now proven: make sure this socket is in the room even
+      // if the conversation appeared after it connected.
+      this.connections.join(socket, [message.conversationId]);
+      const envelope = createEnvelope(WS_EVENTS.chatMessage, message);
+      if (created) {
+        this.connections.sendToConversation(message.conversationId, envelope);
+        return undefined;
+      }
+      // A resend of a stored message: everyone else already has it.
+      return envelope;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'NOT_FOUND') {
+        return this.error(
+          'NOT_A_MEMBER',
+          'Not a member of this conversation',
+          payload,
+        );
+      }
+      this.logger.error(
+        `chat.send failed for user ${sender.userId}: ${error instanceof Error ? error.message : error}`,
+      );
+      return this.error(
+        'SEND_FAILED',
+        'Message could not be sent, retry',
+        payload,
+      );
+    }
+  }
+
+  /** Replies to the offending socket only; the connection stays open. */
   @SubscribeMessage(INVALID_FRAME_EVENT)
   handleInvalidFrame(@MessageBody() error: SystemErrorPayload): ServerEnvelope {
     return createEnvelope(WS_EVENTS.systemError, error);
+  }
+
+  private error(
+    code: SystemErrorPayload['code'],
+    message: string,
+    payload: ChatSendPayload,
+  ): ServerEnvelope {
+    return createEnvelope(WS_EVENTS.systemError, {
+      code,
+      message,
+      clientMessageId: payload.clientMessageId,
+    });
   }
 }

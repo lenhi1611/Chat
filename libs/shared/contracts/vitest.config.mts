@@ -9,6 +9,8 @@ export default defineConfig(() => ({
   test: {
     name: 'contracts',
     watch: false,
+    // No spec files at the moment.
+    passWithNoTests: true,
     globals: true,
     environment: 'node',
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],

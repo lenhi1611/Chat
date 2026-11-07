@@ -5,13 +5,16 @@ export {
   ChatSocketService,
   SocketNotOpenError,
   type ChatSocketState,
+  type SocketRejection,
 } from './lib/chat-socket.service';
 export {
   provideChatSocket,
   CHAT_SOCKET_CONFIG,
-  CLIENT_ID_STORAGE,
+  CHAT_SOCKET_URL,
+  SocketRejectedError,
   WEB_SOCKET_FACTORY,
   type ChatSocketConfig,
   type ReconnectOptions,
+  type SocketUrlProvider,
   type WebSocketLike,
 } from './lib/chat-socket.config';

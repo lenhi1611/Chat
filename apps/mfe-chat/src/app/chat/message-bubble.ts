@@ -21,7 +21,7 @@ import type { ChatMessage } from '@realtime-chat/chat-data-access';
   template: `
     <span class="px-1 text-xs text-muted-foreground">
       <span data-testid="message-sender">{{
-        own() ? 'You' : message().senderNickname
+        own() ? 'You' : senderName()
       }}</span>
       ·
       <time [attr.datetime]="message().sentAt">{{
@@ -43,4 +43,6 @@ import type { ChatMessage } from '@realtime-chat/chat-data-access';
 export class MessageBubble {
   readonly message = input.required<ChatMessage>();
   readonly own = input(false);
+  /** From the conversation members (messages carry the sender's id only). */
+  readonly senderName = input('');
 }

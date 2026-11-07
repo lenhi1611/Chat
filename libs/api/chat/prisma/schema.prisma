@@ -1,0 +1,73 @@
+// chat_db: conversations, members and messages. Owned by libs/api/chat only.
+// User ids are plain uuids: users live in auth_db, with no foreign key across
+// databases. Generated client: src/generated/prisma (git-ignored).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ConversationType {
+  dm
+  group
+}
+
+model Conversation {
+  id            String           @id @default(uuid()) @db.Uuid
+  type          ConversationType
+  /// Group name; null for a DM.
+  name          String?
+  /// DM only: the two user ids sorted and joined, so a pair has one DM even
+  /// when both users create it at the same time. Null for groups.
+  dmKey         String?          @unique @map("dm_key")
+  createdBy     String           @map("created_by") @db.Uuid
+  /// Highest seq given to a message here; incremented in the insert transaction.
+  lastSeq       Int              @default(0) @map("last_seq")
+  /// Last activity, for sorting the conversation list: set at creation, then
+  /// at each message (the service writes it; nullable only by history).
+  lastMessageAt DateTime?        @map("last_message_at") @db.Timestamptz(3)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversationId String   @map("conversation_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  joinedAt       DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id              String   @id @default(uuid()) @db.Uuid
+  conversationId  String   @map("conversation_id") @db.Uuid
+  /// 1, 2, 3… per conversation, from conversations.last_seq.
+  seq             Int
+  senderId        String   @map("sender_id") @db.Uuid
+  clientMessageId String   @map("client_message_id") @db.Uuid
+  text            String
+  sentAt          DateTime @default(now()) @map("sent_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  /// Also serves the cursor query `WHERE conversation_id = ? AND seq < ?
+  /// ORDER BY seq DESC`: a b-tree index is scanned backwards just as fast.
+  @@unique([conversationId, seq])
+  /// Resending the same clientMessageId returns the stored message.
+  @@unique([conversationId, senderId, clientMessageId])
+  @@map("messages")
+}
