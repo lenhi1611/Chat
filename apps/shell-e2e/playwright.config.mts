@@ -8,8 +8,12 @@ import { workspaceRoot } from '@nx/devkit';
 const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
 
 /**
- * End-to-end tests for the whole stack: shell (4200) loads the mfe-chat
- * remote (4202), which chats through the api-gateway WebSocket (3000).
+ * End-to-end tests for the whole stack: shell (4200) loads the mfe-auth
+ * (4201) and mfe-chat (4202) remotes, which talk to the api-gateway (3000,
+ * REST + WebSocket; Postgres and Redis from docker compose).
+ *
+ * Every test registers its own users (`e2e_…`), so tests do not share state;
+ * those accounts stay in the database the gateway uses.
  *
  * Locally, servers that are already running (e.g. `npm run serve:all`) are
  * reused; otherwise Playwright starts each one and waits for its URL.
@@ -19,8 +23,8 @@ const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
  */
 export default defineConfig({
   ...nxE2EPreset(import.meta.dirname, { testDir: './src' }),
-  // All tests share one chat room on one gateway: run them one at a time so
-  // a test never sees another test's traffic in an unexpected order.
+  // Tests are isolated by their own users, but several browsers per test on
+  // dev servers is heavy: keep one worker for stable timings.
   fullyParallel: false,
   workers: 1,
   use: {
@@ -31,6 +35,13 @@ export default defineConfig({
     {
       command: 'npx nx serve api-gateway',
       url: 'http://localhost:3000/api/health',
+      reuseExistingServer: !process.env['CI'],
+      cwd: workspaceRoot,
+      timeout: 180_000,
+    },
+    {
+      command: 'npx nx serve mfe-auth',
+      url: 'http://localhost:4201/remoteEntry.json',
       reuseExistingServer: !process.env['CI'],
       cwd: workspaceRoot,
       timeout: 180_000,

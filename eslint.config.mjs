@@ -36,6 +36,8 @@ const depConstraints = [
     onlyDependOnLibsWithTags: ['scope:shared', 'scope:api'],
   },
   { sourceTag: 'scope:shared', onlyDependOnLibsWithTags: ['scope:shared'] },
+  // e2e drives the running apps; it may share the protocol types only.
+  { sourceTag: 'scope:e2e', onlyDependOnLibsWithTags: ['platform:any'] },
 
   // --- type ----------------------------------------------------------------
   { sourceTag: 'type:lib', onlyDependOnLibsWithTags: ['type:lib'] },
