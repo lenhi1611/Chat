@@ -49,6 +49,8 @@ export class ChatGateway
 {
   private readonly logger = new Logger(ChatGateway.name);
   private sessionsEnded?: Subscription;
+  /** Tail of each socket's chat.send queue (see handleChatSend). */
+  private readonly sendQueues = new WeakMap<WebSocket, Promise<unknown>>();
 
   constructor(
     private readonly connections: ConnectionRegistry,
@@ -121,11 +123,31 @@ export class ChatGateway
    * Validate (parser) → member? → store (seq) → broadcast to every socket of
    * every member, sender included. Failures answer the sender only, with its
    * clientMessageId; the connection stays open.
+   *
+   * One socket's frames are handled one after another: run concurrently, the
+   * transactions would commit (and take their `seq`) in any order, so quick
+   * successive messages would be stored out of the order they were typed.
+   * Different sockets still run in parallel.
    */
   @SubscribeMessage(WS_EVENTS.chatSend)
-  async handleChatSend(
+  handleChatSend(
     @ConnectedSocket() socket: WebSocket,
     @MessageBody() payload: ChatSendPayload,
+  ): Promise<ServerEnvelope | undefined> {
+    const previous = this.sendQueues.get(socket) ?? Promise.resolve();
+    const result = previous.then(() => this.processChatSend(socket, payload));
+    // processChatSend answers errors itself; the catch only keeps the chain
+    // alive if something unexpected throws.
+    this.sendQueues.set(
+      socket,
+      result.catch(() => undefined),
+    );
+    return result;
+  }
+
+  private async processChatSend(
+    socket: WebSocket,
+    payload: ChatSendPayload,
   ): Promise<ServerEnvelope | undefined> {
     const sender = this.connections.get(socket);
     if (!sender) return undefined;
