@@ -6,6 +6,7 @@ import {
   type CreateConversationRequest,
   isApiError,
   type ListMessagesResponse,
+  type UserSummary,
   type WsTicketResponse,
 } from '@realtime-chat/contracts';
 import type { Observable } from 'rxjs';
@@ -43,6 +44,13 @@ export class ChatApiService {
       this.url(API_PATHS.conversations),
       request,
     );
+  }
+
+  /** Prefix search on username; the caller is never in the results. */
+  searchUsers(query: string): Observable<UserSummary[]> {
+    return this.http.get<UserSummary[]>(this.url(API_PATHS.users.search), {
+      params: { q: query },
+    });
   }
 
   /** `before: null` → the latest page. */

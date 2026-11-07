@@ -15,6 +15,7 @@ export * from './lib/shared/components/badge';
 export * from './lib/shared/components/button';
 export * from './lib/shared/components/alert';
 export * from './lib/shared/components/card';
+export * from './lib/shared/components/dialog';
 export * from './lib/shared/components/field';
 export * from './lib/shared/components/input';
 export * from './lib/shared/components/input-group';

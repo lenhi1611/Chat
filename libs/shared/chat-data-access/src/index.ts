@@ -5,6 +5,7 @@ export {
   provideChatConnection,
   type ChatConnectionConfig,
 } from './lib/provide-chat-connection';
+export { UserDirectory } from './lib/user-directory.service';
 export {
   ChatActions,
   ConversationsActions,

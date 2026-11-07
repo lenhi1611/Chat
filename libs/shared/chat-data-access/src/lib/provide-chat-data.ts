@@ -11,6 +11,7 @@ import { connectionFeature } from './connection.feature';
 import { conversationsEffects } from './conversations.effects';
 import { conversationsFeature } from './conversations.feature';
 import { messagesFeature } from './messages.feature';
+import { UserDirectory } from './user-directory.service';
 
 /**
  * Registers the chat state (connection, conversations, histories, errors),
@@ -24,6 +25,7 @@ export function provideChatData(apiBaseUrl: string): EnvironmentProviders {
   return makeEnvironmentProviders([
     { provide: CHAT_API_BASE_URL, useValue: apiBaseUrl.replace(/\/+$/, '') },
     ChatApiService,
+    UserDirectory,
     provideState(connectionFeature),
     provideState(conversationsFeature),
     provideState(messagesFeature),

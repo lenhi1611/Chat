@@ -11,3 +11,12 @@
 
 /* This app's own templates. */
 @source './';
+
+/*
+ * The remotes' templates too: under the shell, only this stylesheet is loaded
+ * (Native Federation shares code, not CSS), so a class used only by a remote
+ * must be generated here. Trade-off: a remote deployed with new classes needs
+ * a shell rebuild; standalone, each remote's own styles.css covers itself.
+ */
+@source '../../mfe-auth/src';
+@source '../../mfe-chat/src';
