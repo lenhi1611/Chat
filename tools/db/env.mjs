@@ -29,3 +29,15 @@ export function testRedisUrl() {
   url.pathname = '/15';
   return url.toString();
 }
+
+/**
+ * RabbitMQ used by tests: `TEST_RABBITMQ_URL` when set, otherwise
+ * `RABBITMQ_URL`. Tests isolate themselves with randomly prefixed exchange
+ * and queue names (see libs/api/messaging), and delete them afterwards.
+ */
+export function testRabbitUrl() {
+  loadWorkspaceEnv();
+  const url = process.env['TEST_RABBITMQ_URL'] ?? process.env['RABBITMQ_URL'];
+  if (!url) throw new Error('RABBITMQ_URL is not set (see .env.example)');
+  return url;
+}
