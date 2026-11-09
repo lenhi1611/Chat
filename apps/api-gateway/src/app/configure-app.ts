@@ -4,6 +4,7 @@ import { WsTicketService } from '@realtime-chat/api-auth';
 import { API_GLOBAL_PREFIX } from '@realtime-chat/contracts';
 import cookieParser from 'cookie-parser';
 import { ChatWsAdapter } from '../chat/transport/chat-ws.adapter';
+import { correlationIdMiddleware } from '../http/correlation-id';
 import type { Env } from '../config/env.schema';
 
 /**
@@ -23,6 +24,8 @@ export function configureApp(app: INestApplication): ConfigService<Env, true> {
   });
   // Reads the refresh-token cookie (req.cookies) on /api/auth/*.
   app.use(cookieParser());
+  // A correlation id per request, passed on to the services and logged.
+  app.use(correlationIdMiddleware);
   // Plain `ws` on the HTTP server's port (gateway port 0), path from WS_PATH.
   app.useWebSocketAdapter(
     new ChatWsAdapter(app, {

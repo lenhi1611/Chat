@@ -61,6 +61,11 @@ const envObject = z.object({
   /** WebSocket tickets (single-use, short-lived). */
   REDIS_URL: redisUrl,
 
+  /** RabbitMQ: RPC to auth-service / chat-service (phase 3). */
+  RABBITMQ_URL: z.url({ protocol: /^amqps?$/ }),
+  /** How long a REST call waits for a service before answering 503. */
+  RPC_TIMEOUT_MS: z.coerce.number().int().min(100).default(5000),
+
   /** HS256 key for access tokens. Required in production (see below). */
   JWT_ACCESS_SECRET: z.string().min(32).optional(),
   JWT_ACCESS_TTL_SECONDS: seconds(900),

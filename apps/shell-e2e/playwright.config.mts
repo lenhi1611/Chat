@@ -10,7 +10,8 @@ const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
 /**
  * End-to-end tests for the whole stack: shell (4200) loads the mfe-auth
  * (4201) and mfe-chat (4202) remotes, which talk to the api-gateway (3000,
- * REST + WebSocket; Postgres and Redis from docker compose).
+ * REST + WebSocket), which talks to auth-service and chat-service over
+ * RabbitMQ (Postgres, Redis and RabbitMQ from docker compose).
  *
  * Every test registers its own users (`e2e_…`), so tests do not share state;
  * those accounts stay in the database the gateway uses.
@@ -32,13 +33,15 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: [
-    {
-      command: 'npx nx serve api-gateway',
+    // The services have no HTTP port: the gateway's health check answers
+    // 200 only once RabbitMQ and both services respond (503 until then).
+    ...['auth-service', 'chat-service', 'api-gateway'].map((project) => ({
+      command: `npx nx serve ${project}`,
       url: 'http://localhost:3000/api/health',
       reuseExistingServer: !process.env['CI'],
       cwd: workspaceRoot,
       timeout: 180_000,
-    },
+    })),
     {
       command: 'npx nx serve mfe-auth',
       url: 'http://localhost:4201/remoteEntry.json',

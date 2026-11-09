@@ -3,12 +3,13 @@ import {
   Controller,
   Get,
   HttpStatus,
+  Inject,
   Param,
   Post,
   Query,
   Res,
 } from '@nestjs/common';
-import { ChatService } from '@realtime-chat/api-chat';
+import type { RpcClient } from '@realtime-chat/api-messaging';
 import {
   type ConversationDTO,
   conversationIdParamSchema,
@@ -17,57 +18,57 @@ import {
   type ListMessagesQuery,
   listMessagesQuerySchema,
   type ListMessagesResponse,
+  RPC_PATTERNS,
 } from '@realtime-chat/contracts';
 import type { Response } from 'express';
-import { ChatRealtimeService } from '../chat/chat-realtime.service';
 import {
   type AuthenticatedUser,
   CurrentUser,
 } from '../auth/current-user.decorator';
+import { ChatRealtimeService } from '../chat/chat-realtime.service';
+import { CorrelationId } from '../http/correlation-id';
 import { ZodValidationPipe } from '../http/zod-validation.pipe';
+import { CHAT_RPC } from '../messaging/service-clients.module';
 
-/** Thin HTTP edge over ChatService (libs/api/chat): rules live there. */
+/** Thin HTTP edge over chat-service (RPC over RabbitMQ): rules live there. */
 @Controller('conversations')
 export class ConversationsController {
   constructor(
-    private readonly chat: ChatService,
+    @Inject(CHAT_RPC) private readonly chat: RpcClient,
     private readonly realtime: ChatRealtimeService,
   ) {}
 
   /** The caller's conversations, most recent activity first. */
   @Get()
-  list(@CurrentUser() caller: AuthenticatedUser): Promise<ConversationDTO[]> {
-    return this.chat.listConversations(caller.userId);
+  list(
+    @CurrentUser() caller: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
+  ): Promise<ConversationDTO[]> {
+    return this.chat.call(
+      RPC_PATTERNS.chatConversationsList,
+      { userId: caller.userId },
+      correlationId,
+    );
   }
 
-  /**
-   * 201 when created (and pushed to the members' sockets as
-   * conversation.created); 200 when the DM already existed.
-   */
+  /** 201 when created; 200 when the DM already existed. */
   @Post()
   async create(
     @Body(new ZodValidationPipe(createConversationRequestSchema))
     body: CreateConversationRequest,
     @CurrentUser() caller: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<ConversationDTO> {
-    if (body.type === 'dm') {
-      const { value, created } = await this.chat.createDm(
-        caller.userId,
-        body.userId,
-      );
-      response.status(created ? HttpStatus.CREATED : HttpStatus.OK);
-      if (created) this.realtime.conversationCreated(value);
-      return value;
-    }
-    const group = await this.chat.createGroup(
-      caller.userId,
-      body.name,
-      body.memberIds,
+    const { conversation, created } = await this.chat.call(
+      RPC_PATTERNS.chatConversationsCreate,
+      { userId: caller.userId, request: body },
+      correlationId,
     );
-    response.status(HttpStatus.CREATED);
-    this.realtime.conversationCreated(group);
-    return group;
+    response.status(created ? HttpStatus.CREATED : HttpStatus.OK);
+    // Until this gateway consumes chat.conversation.created (step 7).
+    if (created) this.realtime.conversationCreated(conversation);
+    return conversation;
   }
 
   /** Cursor pagination on seq: `?before=<seq>&limit=` (default 30, max 100). */
@@ -78,7 +79,12 @@ export class ConversationsController {
     @Query(new ZodValidationPipe(listMessagesQuerySchema))
     query: ListMessagesQuery,
     @CurrentUser() caller: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
   ): Promise<ListMessagesResponse> {
-    return this.chat.listMessages(caller.userId, params.id, query);
+    return this.chat.call(
+      RPC_PATTERNS.chatMessagesList,
+      { userId: caller.userId, conversationId: params.id, ...query },
+      correlationId,
+    );
   }
 }

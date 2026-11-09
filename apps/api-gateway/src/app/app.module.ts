@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AuthModule } from '@realtime-chat/api-auth';
+import { MessagingModule } from '@realtime-chat/api-messaging';
 import { ChatDomainModule } from '@realtime-chat/api-chat';
 import { RedisModule } from '@realtime-chat/api-redis';
 import { AccessTokenGuard } from '../auth/access-token.guard';
+import { AccessTokenVerifier } from '../auth/access-token.verifier';
 import { AuthHttpModule } from '../auth/auth-http.module';
 import { ChatModule } from '../chat/chat.module';
 import { AuthUsersAdapter } from '../conversations/auth-users.adapter';
@@ -12,6 +14,7 @@ import { ConversationsHttpModule } from '../conversations/conversations-http.mod
 import { type Env, validateEnv } from '../config/env.schema';
 import { HealthModule } from '../health/health.module';
 import { ApiExceptionFilter } from '../http/api-exception.filter';
+import { ServiceClientsModule } from '../messaging/service-clients.module';
 
 @Module({
   imports: [
@@ -22,6 +25,18 @@ import { ApiExceptionFilter } from '../http/api-exception.filter';
       envFilePath: ['.env'],
       validate: validateEnv,
     }),
+    // RabbitMQ: REST goes to auth-service / chat-service as RPCs (global).
+    MessagingModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => ({
+        url: config.get('RABBITMQ_URL', { infer: true }),
+        connectionName: 'api-gateway',
+        rpcTimeoutMs: config.get('RPC_TIMEOUT_MS', { infer: true }),
+      }),
+    }),
+    ServiceClientsModule,
+    // Phase 3, until step 7: the WebSocket side still runs the domain
+    // libraries in-process (Redis, auth_db, chat_db). REST no longer does.
     // One Redis connection for the whole app (global: no need to re-import).
     RedisModule.forRootAsync({
       inject: [ConfigService],
@@ -63,6 +78,7 @@ import { ApiExceptionFilter } from '../http/api-exception.filter';
     ChatModule,
   ],
   providers: [
+    AccessTokenVerifier,
     // Every HTTP route requires a Bearer access token unless @Public().
     { provide: APP_GUARD, useClass: AccessTokenGuard },
     // Every HTTP error leaves as { error: { code, message, details? } }.

@@ -69,7 +69,22 @@ export class ChatApiService {
   }
 }
 
+/** Shown instead of the server's technical wording for SERVICE_UNAVAILABLE. */
+export const SERVICE_UNAVAILABLE_MESSAGE =
+  'Chat is temporarily unavailable. Please try again in a moment.';
+
 export function toRequestError(error: unknown): RequestError {
+  if (
+    error instanceof HttpErrorResponse &&
+    (error.status === 503 ||
+      (isApiError(error.error) &&
+        error.error.error.code === 'SERVICE_UNAVAILABLE'))
+  ) {
+    return {
+      code: 'SERVICE_UNAVAILABLE',
+      message: SERVICE_UNAVAILABLE_MESSAGE,
+    };
+  }
   if (error instanceof HttpErrorResponse && isApiError(error.error)) {
     const { code, message } = error.error.error;
     return { code, message };

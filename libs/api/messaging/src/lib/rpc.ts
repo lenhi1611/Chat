@@ -47,10 +47,13 @@ export class RpcClient {
     pattern: P,
     data: RpcRequest<P>,
     correlationId: string,
+    /** A shorter timeout for this call (health checks). */
+    options: { timeoutMs?: number } = {},
   ): Promise<RpcResponse<P>> {
+    const timeoutMs = options.timeoutMs ?? this.timeoutMs;
     const record = new RmqRecordBuilder(data)
       .setOptions({
-        expiration: String(this.timeoutMs),
+        expiration: String(timeoutMs),
         persistent: false,
         headers: { [MESSAGING_HEADERS.correlationId]: correlationId },
       })
@@ -58,7 +61,7 @@ export class RpcClient {
     let reply: unknown;
     try {
       reply = await lastValueFrom(
-        this.proxy.send(pattern, record).pipe(timeout(this.timeoutMs)),
+        this.proxy.send(pattern, record).pipe(timeout(timeoutMs)),
       );
     } catch (error) {
       throw toAppError(error, this.service);
