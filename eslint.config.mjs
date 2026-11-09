@@ -70,11 +70,23 @@ const depConstraints = [
   // --- backend domains (libs/api/*) -----------------------------------------
   {
     sourceTag: 'domain:auth',
-    onlyDependOnLibsWithTags: ['platform:any', 'domain:infra', 'domain:shared'],
+    onlyDependOnLibsWithTags: [
+      'platform:any',
+      'domain:infra',
+      'domain:shared',
+      // its own domain: the auth-service app imports libs/api/auth
+      'domain:auth',
+    ],
   },
   {
     sourceTag: 'domain:chat',
-    onlyDependOnLibsWithTags: ['platform:any', 'domain:infra', 'domain:shared'],
+    onlyDependOnLibsWithTags: [
+      'platform:any',
+      'domain:infra',
+      'domain:shared',
+      // its own domain: the chat-service app imports libs/api/chat
+      'domain:chat',
+    ],
   },
   { sourceTag: 'domain:infra', onlyDependOnLibsWithTags: ['platform:any'] },
   // RabbitMQ plumbing (libs/api/messaging), shared by the backend apps.

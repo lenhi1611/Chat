@@ -192,10 +192,23 @@ export async function handleRpc<P extends RpcPattern>(
       details: issuesOf(parsed.error),
     } satisfies RpcError);
   }
+  const started = Date.now();
   try {
-    return await handler(parsed.data as RpcRequestParsed<P>, { correlationId });
+    const reply = await handler(parsed.data as RpcRequestParsed<P>, {
+      correlationId,
+    });
+    logger.log(
+      `${pattern} ok in ${Date.now() - started}ms [correlationId=${correlationId}]`,
+    );
+    return reply;
   } catch (error) {
-    throw new RpcException(toRpcError(error, logger, pattern, correlationId));
+    const rpcError = toRpcError(error, logger, pattern, correlationId);
+    if (rpcError.code !== 'INTERNAL_ERROR') {
+      logger.log(
+        `${pattern} answered ${rpcError.code} in ${Date.now() - started}ms [correlationId=${correlationId}]`,
+      );
+    }
+    throw new RpcException(rpcError);
   }
 }
 
