@@ -49,6 +49,12 @@ const logger = new Logger('test');
 // The reconnect warnings of the offline test etc. are expected: keep output clean.
 Logger.overrideLogger(false);
 
+/** For calls that must fail: the test fails if they resolve. */
+const unexpected = (): never => {
+  throw new Error('expected the call to fail');
+};
+const asAppError = (error: unknown) => error as AppError;
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function until(check: () => boolean, timeoutMs = 5000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -110,7 +116,8 @@ const rpcCalls: { correlationId: string }[] = [];
 @Controller()
 class AuthRpcController {
   @MessagePattern(RPC_PATTERNS.authPing)
-  ping(@Payload() data: unknown, @Ctx() context: RmqContext) {
+  ping(@Payload() data: unknown, @Ctx() rawContext: unknown) {
+    const context = rawContext as RmqContext;
     return handleRpc(
       RPC_PATTERNS.authPing,
       data,
@@ -124,14 +131,16 @@ class AuthRpcController {
   }
 
   @MessagePattern(RPC_PATTERNS.authMe)
-  me(@Payload() data: unknown, @Ctx() context: RmqContext) {
+  me(@Payload() data: unknown, @Ctx() rawContext: unknown) {
+    const context = rawContext as RmqContext;
     return handleRpc(RPC_PATTERNS.authMe, data, context, logger, async () => {
       throw new AppError('UNAUTHENTICATED', 'User no longer exists');
     });
   }
 
   @MessagePattern(RPC_PATTERNS.authUsersSummaries)
-  summaries(@Payload() data: unknown, @Ctx() context: RmqContext) {
+  summaries(@Payload() data: unknown, @Ctx() rawContext: unknown) {
+    const context = rawContext as RmqContext;
     return handleRpc(
       RPC_PATTERNS.authUsersSummaries,
       data,
@@ -161,20 +170,20 @@ describe('RPC', () => {
 
       const domain = await client
         .call(RPC_PATTERNS.authMe, { userId: crypto.randomUUID() }, 'c')
-        .catch((e: unknown) => e);
+        .then(unexpected, asAppError);
       expect(domain).toBeInstanceOf(AppError);
-      expect((domain as AppError).code).toBe('UNAUTHENTICATED');
+      expect(domain.code).toBe('UNAUTHENTICATED');
 
       const invalid = await client
         .call(RPC_PATTERNS.authMe, { userId: 'not-a-uuid' }, 'c')
-        .catch((e: AppError) => e);
+        .then(unexpected, asAppError);
       expect(invalid.code).toBe('VALIDATION_FAILED');
       expect(invalid.details?.[0]?.path).toBe('userId');
 
       // An unexpected failure does not leak its message.
       const crash = await client
         .call(RPC_PATTERNS.authUsersSummaries, { ids: [] }, 'c')
-        .catch((e: AppError) => e);
+        .then(unexpected, asAppError);
       expect(crash.code).toBe('INTERNAL_ERROR');
       expect(crash.message).not.toContain('exploded');
     } finally {
@@ -193,7 +202,7 @@ describe('RPC', () => {
       const started = Date.now();
       const error = await client
         .call(RPC_PATTERNS.authPing, {}, 'c')
-        .catch((e: AppError) => e);
+        .then(unexpected, asAppError);
       expect(error.code).toBe('SERVICE_UNAVAILABLE');
       expect(Date.now() - started).toBeLessThan(1500);
 
@@ -220,7 +229,8 @@ function listenerFor(instance: string) {
   @Controller()
   class Listener {
     @EventPattern(DOMAIN_EVENTS.sessionRevoked)
-    revoked(@Payload() data: unknown, @Ctx() context: RmqContext) {
+    revoked(@Payload() data: unknown, @Ctx() rawContext: unknown) {
+      const context = rawContext as RmqContext;
       return consumeEvent(
         context,
         data,
@@ -280,7 +290,7 @@ describe('events', () => {
             'c',
           ),
         )
-        .catch((e: AppError) => e);
+        .then(unexpected, asAppError);
       expect(error.code).toBe('SERVICE_UNAVAILABLE');
       expect(Date.now() - publishing).toBeLessThan(100);
       expect(offline.isConnected()).toBe(false);
@@ -307,7 +317,8 @@ const commandTracker = new InflightTracker();
 @Controller()
 class CommandController {
   @EventPattern(COMMAND_PATTERNS.chatSend)
-  send(@Payload() data: unknown, @Ctx() context: RmqContext) {
+  send(@Payload() data: unknown, @Ctx() rawContext: unknown) {
+    const context = rawContext as RmqContext;
     commandState.redelivered.push(
       (context.getMessage() as { fields: { redelivered: boolean } }).fields
         .redelivered,

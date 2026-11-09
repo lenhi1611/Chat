@@ -55,7 +55,7 @@ import { ApiExceptionFilter } from '../http/api-exception.filter';
       useFactory: (config: ConfigService<Env, true>) => ({
         databaseUrl: config.get('DATABASE_URL_CHAT', { infer: true }),
       }),
-      usersPort: AuthUsersAdapter,
+      userSource: AuthUsersAdapter,
     }),
     HealthModule,
     AuthHttpModule,

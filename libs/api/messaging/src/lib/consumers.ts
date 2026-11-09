@@ -263,10 +263,14 @@ export function commandServerOptions(
 }
 
 /**
- * An event consumer bound to the events exchange. Nest binds the queue to
- * one routing key per `@EventPattern` of the app (`wildcards`).
- * - `{ instanceQueue }`: this process's own queue (gateway), exclusive;
- * - `{ durableQueue: 'chatUserSync' }`: a shared durable queue.
+ * An event consumer.
+ * - `{ instanceQueue }`: this process's own queue (gateway), exclusive and
+ *   bound by Nest to one routing key per `@EventPattern` of the app
+ *   (`wildcards`): give it an app whose only patterns are its events.
+ * - `{ durableQueue: 'chatUserSync' }`: a shared durable queue whose bindings
+ *   come from the topology. No `wildcards` here: Nest would bind it to every
+ *   pattern of the app (its RPCs and commands too), as all the RMQ servers of
+ *   one app share its handlers.
  */
 export function eventServerOptions(
   url: string,
@@ -274,23 +278,31 @@ export function eventServerOptions(
   queue: { instanceQueue: string } | { durableQueue: 'chatUserSync' },
   prefetchCount = 50,
 ): RmqOptions {
-  const isInstance = 'instanceQueue' in queue;
+  const common = {
+    urls: [url],
+    noAck: false,
+    prefetchCount,
+    socketOptions: { reconnectTimeInSeconds: 1 },
+  };
+  if ('instanceQueue' in queue) {
+    return {
+      transport: Transport.RMQ,
+      options: {
+        ...common,
+        exchange: topology.names.exchange,
+        exchangeType: 'topic',
+        wildcards: true,
+        queue: queue.instanceQueue,
+        queueOptions: INSTANCE_QUEUE_OPTIONS,
+      },
+    };
+  }
   return {
     transport: Transport.RMQ,
     options: {
-      urls: [url],
-      exchange: topology.names.exchange,
-      exchangeType: 'topic',
-      wildcards: true,
-      queue: isInstance
-        ? queue.instanceQueue
-        : topology.names[queue.durableQueue],
-      queueOptions: isInstance
-        ? INSTANCE_QUEUE_OPTIONS
-        : queueOptions(topology, queue.durableQueue),
-      noAck: false,
-      prefetchCount,
-      socketOptions: { reconnectTimeInSeconds: 1 },
+      ...common,
+      queue: topology.names[queue.durableQueue],
+      queueOptions: queueOptions(topology, queue.durableQueue),
     },
   };
 }

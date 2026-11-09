@@ -1,10 +1,10 @@
 import type { UserSummary } from '@realtime-chat/contracts';
-import type { UsersPort } from '../lib/users.port';
+import type { UserSource } from '../lib/user-source.port';
 
-/** In-memory users for chat tests (the real port reads auth_db). */
-export class FakeUsersPort implements UsersPort {
+/** In-memory users standing in for auth-service (the read-through source). */
+export class FakeUserSource implements UserSource {
   private readonly users = new Map<string, UserSummary>();
-  /** Calls to findSummariesByIds, to check users are fetched in one lookup. */
+  /** Remote lookups made, to check the local copy is used once filled. */
   lookups = 0;
 
   add(username: string): UserSummary {
@@ -20,9 +20,5 @@ export class FakeUsersPort implements UsersPort {
   async findSummariesByIds(ids: readonly string[]): Promise<UserSummary[]> {
     this.lookups += 1;
     return [...new Set(ids)].flatMap((id) => this.users.get(id) ?? []);
-  }
-
-  async exists(id: string): Promise<boolean> {
-    return this.users.has(id);
   }
 }

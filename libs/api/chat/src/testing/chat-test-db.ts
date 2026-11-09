@@ -11,6 +11,6 @@ export async function truncateChatTables(
   prisma: ChatPrismaService,
 ): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "messages", "conversation_members", "conversations" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "messages", "conversation_members", "conversations", "chat_users" RESTART IDENTITY CASCADE',
   );
 }

@@ -1,13 +1,14 @@
 import { inject } from 'vitest';
 import { AppError } from '@realtime-chat/contracts';
-import { FakeUsersPort } from '../testing/fake-users-port';
+import { FakeUserSource } from '../testing/fake-user-source';
 import { truncateChatTables } from '../testing/chat-test-db';
 import { ChatService, dmKeyOf } from './chat.service';
 import { ChatPrismaService } from './prisma/chat-prisma.service';
+import { UserDirectory } from './user-directory';
 
 describe('ChatService (integration, chat_test)', () => {
   let prisma: ChatPrismaService;
-  let users: FakeUsersPort;
+  let users: FakeUserSource;
   let chat: ChatService;
   const queries: string[] = [];
 
@@ -26,8 +27,8 @@ describe('ChatService (integration, chat_test)', () => {
   afterAll(() => prisma.onModuleDestroy());
   beforeEach(async () => {
     await truncateChatTables(prisma);
-    users = new FakeUsersPort();
-    chat = new ChatService(prisma, users);
+    users = new FakeUserSource();
+    chat = new ChatService(prisma, new UserDirectory(prisma, users));
     queries.length = 0;
   });
 
@@ -304,12 +305,44 @@ describe('ChatService (integration, chat_test)', () => {
         large.list.every((c) => c.lastMessage && c.members.length === 2),
       ).toBe(true);
       expect(large.queries).toBe(small.queries);
-      expect(large.lookups).toBe(1);
-      // Logged for the review: conversations, members, last messages.
+      // Every member was read through once while creating the DMs, so the
+      // list is served from chat_users without asking auth-service.
+      expect(large.lookups).toBe(0);
+      // Logged for the review: conversations, members, last messages, users.
       console.info(
         `listConversations: ${large.queries} SQL queries for 12 conversations`,
       );
-      expect(large.queries).toBeLessThanOrEqual(3);
+      expect(large.queries).toBeLessThanOrEqual(4);
+    });
+  });
+
+  describe('user directory (chat_users + read-through)', () => {
+    it('fetches an unknown user once, then serves it locally', async () => {
+      const directory = new UserDirectory(prisma, users);
+      const ann = users.add('ann');
+      expect(await directory.findSummariesByIds([ann.id])).toEqual([ann]);
+      expect(users.lookups).toBe(1);
+      expect(await directory.findSummariesByIds([ann.id, ann.id])).toEqual([
+        ann,
+      ]);
+      expect(await directory.exists(ann.id)).toBe(true);
+      expect(users.lookups).toBe(1);
+      expect(await directory.exists(crypto.randomUUID())).toBe(false);
+    });
+
+    it('takes users from events without asking the source, idempotently', async () => {
+      const directory = new UserDirectory(prisma, users);
+      const ben = {
+        id: crypto.randomUUID(),
+        username: 'ben',
+        displayName: 'Ben',
+      };
+      await directory.upsert(ben);
+      await directory.upsert({ ...ben, displayName: 'Ben B' });
+      expect(await directory.findSummariesByIds([ben.id])).toEqual([
+        { ...ben, displayName: 'Ben B' },
+      ]);
+      expect(users.lookups).toBe(0);
     });
   });
 });

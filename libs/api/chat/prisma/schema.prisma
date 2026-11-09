@@ -71,3 +71,16 @@ model Message {
   @@unique([conversationId, senderId, clientMessageId])
   @@map("messages")
 }
+
+/// chat-service's copy of users (they live in auth_db): name and username for
+/// conversation members. Filled by `auth.user.registered` events, and by
+/// read-through (an RPC to auth-service) for users it has not seen yet.
+model ChatUser {
+  id          String   @id @db.Uuid
+  username    String
+  displayName String   @map("display_name")
+  /// When this copy was last written (event or read-through).
+  syncedAt    DateTime @default(now()) @map("synced_at") @db.Timestamptz(3)
+
+  @@map("chat_users")
+}
