@@ -1,0 +1,34 @@
+{
+  "name": "chat-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/chat-service/src",
+  "projectType": "application",
+  "tags": ["scope:api", "type:app", "platform:node", "domain:chat"],
+  "targets": {
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "dependsOn": ["build"],
+      "options": {
+        "buildTarget": "chat-service:build",
+        "runBuildTargetDependencies": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "chat-service:build:development"
+        },
+        "production": {
+          "buildTarget": "chat-service:build:production"
+        }
+      }
+    },
+    "test": {
+      "dependsOn": ["^prisma-generate"],
+      "parallelism": false
+    },
+    "build": {
+      "dependsOn": ["^build", "^prisma-generate"]
+    }
+  }
+}

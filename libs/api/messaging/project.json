@@ -1,0 +1,8 @@
+{
+  "name": "api-messaging",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/api/messaging/src",
+  "projectType": "library",
+  "tags": ["scope:api", "type:lib", "platform:node", "domain:shared"],
+  "targets": {}
+}

@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  EVENT_PUBLISHER,
+  type EventPublisher,
+} from '@realtime-chat/api-messaging';
+import {
   AppError,
   type CurrentUser,
+  createDomainEvent,
+  DOMAIN_EVENTS,
   type LoginRequest,
   type RegisterRequest,
 } from '@realtime-chat/contracts';
-import { type Observable, Subject } from 'rxjs';
 import type { User } from '../generated/prisma/client';
 import { AccessTokenService } from './access-token.service';
 import { AUTH_OPTIONS, type AuthModuleOptions } from './auth.options';
@@ -53,14 +58,6 @@ class AlreadyRotated extends Error {}
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly ended = new Subject<EndedSession>();
-
-  /**
-   * Sessions that just ended (logout, or revoked after token reuse). The app
-   * closes their WebSockets. In-process for now (one gateway instance); a
-   * message bus later.
-   */
-  readonly sessionsEnded$: Observable<EndedSession> = this.ended.asObservable();
 
   constructor(
     @Inject(AUTH_OPTIONS) private readonly options: AuthModuleOptions,
@@ -68,17 +65,41 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly passwords: PasswordService,
     private readonly accessTokens: AccessTokenService,
+    /** Provided by the app (auth-service: RabbitMQ). */
+    @Inject(EVENT_PUBLISHER) private readonly events: EventPublisher,
   ) {}
 
-  /** @throws AppError EMAIL_TAKEN or USERNAME_TAKEN */
-  async register(input: RegisterRequest): Promise<AuthSession> {
+  /**
+   * Creates the user, announces it (`auth.user.registered`), then opens a
+   * session. The user row and the event are two writes (no outbox): if the
+   * event cannot be published, the call fails with SERVICE_UNAVAILABLE but the
+   * user exists; chat-service still learns about it by read-through.
+   * @throws AppError EMAIL_TAKEN, USERNAME_TAKEN or SERVICE_UNAVAILABLE
+   */
+  async register(
+    input: RegisterRequest,
+    correlationId: string = randomUUID(),
+  ): Promise<AuthSession> {
     const user = await this.users.create({
       email: input.email,
       username: input.username,
       displayName: input.displayName,
       passwordHash: await this.passwords.hash(input.password),
     });
-    this.logger.log(`Registered user ${user.id}`);
+    this.logger.log(
+      `Registered user ${user.id} [correlationId=${correlationId}]`,
+    );
+    await this.events.publish(
+      createDomainEvent(
+        DOMAIN_EVENTS.userRegistered,
+        {
+          userId: user.id,
+          username: user.username,
+          displayName: user.displayName,
+        },
+        correlationId,
+      ),
+    );
     return this.startSession(user);
   }
 
@@ -99,7 +120,10 @@ export class AuthService {
   }
 
   /** @throws AppError INVALID_REFRESH_TOKEN */
-  async refresh(rawToken: string | undefined): Promise<AuthSession> {
+  async refresh(
+    rawToken: string | undefined,
+    correlationId: string = randomUUID(),
+  ): Promise<AuthSession> {
     if (!rawToken) throw invalidRefreshToken();
     const current = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: hashToken(rawToken) },
@@ -117,7 +141,13 @@ export class AuthService {
         this.logger.warn(
           `Refresh token reuse detected: session ${current.familyId} of user ${current.userId} revoked`,
         );
-        this.ended.next({ userId: current.userId, sid: current.familyId });
+        await this.sessionEnded(
+          { userId: current.userId, sid: current.familyId },
+          correlationId,
+          // The caller gets INVALID_REFRESH_TOKEN either way: a failed
+          // announcement must not turn a refused theft into a "retry later".
+          { swallowPublishError: true },
+        );
       }
       throw invalidRefreshToken();
     }
@@ -164,7 +194,10 @@ export class AuthService {
    * Revokes the whole session of `rawToken`. Unknown or missing token: no-op
    * (logout must always succeed). Returns the ended session, if any.
    */
-  async logout(rawToken: string | undefined): Promise<EndedSession | null> {
+  async logout(
+    rawToken: string | undefined,
+    correlationId: string = randomUUID(),
+  ): Promise<EndedSession | null> {
     if (!rawToken) return null;
     const token = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: hashToken(rawToken) },
@@ -172,8 +205,20 @@ export class AuthService {
     if (!token) return null;
     await this.revokeFamily(token.familyId, new Date());
     const session = { userId: token.userId, sid: token.familyId };
-    this.ended.next(session);
+    await this.sessionEnded(session, correlationId);
     return session;
+  }
+
+  /**
+   * A session is live while it has a refresh token that is neither revoked
+   * nor expired (logout and reuse detection revoke all of them).
+   */
+  async isSessionActive(sid: string): Promise<boolean> {
+    const live = await this.prisma.refreshToken.findFirst({
+      where: { familyId: sid, revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
+    return live !== null;
   }
 
   /** @throws AppError UNAUTHENTICATED when the user no longer exists */
@@ -218,6 +263,28 @@ export class AuthService {
     return new Date(
       from.getTime() + this.options.refreshTokenTtlDays * 86_400_000,
     );
+  }
+
+  /**
+   * `auth.session.revoked`: every gateway closes the session's sockets (4401).
+   * Idempotent for them: reuse of another token of an already revoked
+   * session announces it again.
+   */
+  private async sessionEnded(
+    session: EndedSession,
+    correlationId: string,
+    { swallowPublishError = false } = {},
+  ): Promise<void> {
+    try {
+      await this.events.publish(
+        createDomainEvent(DOMAIN_EVENTS.sessionRevoked, session, correlationId),
+      );
+    } catch (error) {
+      if (!swallowPublishError) throw error;
+      this.logger.error(
+        `Could not announce the end of session ${session.sid} [correlationId=${correlationId}]: ${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 
   private async revokeFamily(familyId: string, at: Date): Promise<void> {

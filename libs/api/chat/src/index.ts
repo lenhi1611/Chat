@@ -6,4 +6,5 @@ export {
 } from './lib/chat-domain.module';
 export type { ChatModuleOptions } from './lib/chat.options';
 export { ChatService, type Created, type NewMessage } from './lib/chat.service';
-export { USERS_PORT, type UsersPort } from './lib/users.port';
+export { UserDirectory } from './lib/user-directory';
+export { USER_SOURCE, type UserSource } from './lib/user-source.port';

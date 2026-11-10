@@ -22,13 +22,10 @@ const originList = (defaultValue: string) =>
 export const DEV_ONLY_JWT_ACCESS_SECRET =
   'dev-only-insecure-jwt-secret-do-not-use-in-production';
 
-const postgresUrl = z.url({ protocol: /^postgres(ql)?$/ });
-const redisUrl = z.url({ protocol: /^rediss?$/ });
-const seconds = (defaultValue: number) =>
-  z.coerce.number().int().min(1).default(defaultValue);
-
 /**
- * Environment variables required by the api-gateway.
+ * Environment variables of the api-gateway, and only those: it has no
+ * database or Redis (auth-service and chat-service own them), it reaches the
+ * services over RabbitMQ and verifies access tokens itself.
  * Validated once at startup: the process exits with a readable error when a
  * variable is missing or malformed instead of failing later at runtime.
  */
@@ -54,20 +51,24 @@ const envObject = z.object({
   WS_ALLOWED_ORIGINS: originList('http://localhost:4200,http://localhost:4202'),
   /** Ping interval; a client that misses one pong is terminated. */
   WS_HEARTBEAT_MS: z.coerce.number().int().min(10).default(30_000),
+  /**
+   * A socket is closed (4000) after this long and the client reconnects with
+   * a new ticket, which is only issued for a live session: a session that
+   * expired or was revoked without an event reaching us ends here at the
+   * latest. Default: the access-token lifetime.
+   */
+  WS_MAX_AGE_SECONDS: z.coerce.number().int().min(1).default(900),
 
-  /** auth_db (libs/api/auth) and chat_db (libs/api/chat): one database per domain. */
-  DATABASE_URL_AUTH: postgresUrl,
-  DATABASE_URL_CHAT: postgresUrl,
-  /** WebSocket tickets (single-use, short-lived). */
-  REDIS_URL: redisUrl,
+  /** RabbitMQ: RPCs, chat.send commands, events from the services. */
+  RABBITMQ_URL: z.url({ protocol: /^amqps?$/ }),
+  /** How long a REST call waits for a service before answering 503. */
+  RPC_TIMEOUT_MS: z.coerce.number().int().min(100).default(5000),
 
-  /** HS256 key for access tokens. Required in production (see below). */
+  /**
+   * HS256 key auth-service signs access tokens with; the gateway verifies
+   * them locally. Required in production (see below).
+   */
   JWT_ACCESS_SECRET: z.string().min(32).optional(),
-  JWT_ACCESS_TTL_SECONDS: seconds(900),
-  REFRESH_TTL_DAYS: z.coerce.number().int().min(1).default(7),
-  /** Reuse of a rotated refresh token within this window is not treated as theft. */
-  REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().min(0).default(10),
-  WS_TICKET_TTL_SECONDS: seconds(30),
   /** Adds `Secure` to the refresh-token cookie (set true behind HTTPS). */
   COOKIE_SECURE: z.stringbool().default(false),
 });

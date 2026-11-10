@@ -3,6 +3,9 @@ import { z } from 'zod';
 /**
  * Error codes of the REST API, with the HTTP status each one is sent with.
  * Clients branch on `code`, never on `message` (human-readable, may change).
+ *
+ * The one `code → HTTP status` table: services throw / reply these codes
+ * over RabbitMQ, the api-gateway maps them to a status with this table.
  */
 export const API_ERROR_STATUS = {
   /** Body, query or params failed schema validation (see `details`). */
@@ -21,6 +24,11 @@ export const API_ERROR_STATUS = {
   EMAIL_TAKEN: 409,
   USERNAME_TAKEN: 409,
   INTERNAL_ERROR: 500,
+  /**
+   * A backend service did not answer: RPC timeout, no consumer, or the broker
+   * is unreachable. Safe to retry later.
+   */
+  SERVICE_UNAVAILABLE: 503,
 } as const;
 
 export type ApiErrorCode = keyof typeof API_ERROR_STATUS;

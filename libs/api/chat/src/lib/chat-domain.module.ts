@@ -11,7 +11,8 @@ import {
   CHAT_DATABASE_URL,
   ChatPrismaService,
 } from './prisma/chat-prisma.service';
-import { USERS_PORT, type UsersPort } from './users.port';
+import { UserDirectory } from './user-directory';
+import { USER_SOURCE, type UserSource } from './user-source.port';
 
 export interface ChatDomainModuleAsyncOptions extends Pick<
   ModuleMetadata,
@@ -21,14 +22,14 @@ export interface ChatDomainModuleAsyncOptions extends Pick<
   useFactory: (
     ...args: never[]
   ) => ChatModuleOptions | Promise<ChatModuleOptions>;
-  /** Implementation of the users port (where user summaries come from). */
-  usersPort: Type<UsersPort>;
+  /** Where users chat has not seen yet are looked up (read-through). */
+  userSource: Type<UserSource>;
 }
 
 /**
  * The chat domain: conversations, members, messages. Global, so the app
  * registers it once and any module can inject ChatService. The app supplies
- * `usersPort` (chat never imports the auth domain).
+ * `userSource` (chat never imports the auth domain).
  */
 @Module({})
 export class ChatDomainModule {
@@ -49,11 +50,12 @@ export class ChatDomainModule {
           useFactory: (chatOptions: ChatModuleOptions) =>
             chatOptions.databaseUrl,
         },
-        { provide: USERS_PORT, useClass: options.usersPort },
+        { provide: USER_SOURCE, useClass: options.userSource },
         ChatPrismaService,
+        UserDirectory,
         ChatService,
       ],
-      exports: [ChatService],
+      exports: [ChatService, UserDirectory],
     };
   }
 }

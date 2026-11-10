@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ChatGateway } from './chat.gateway';
-import { ChatRealtimeService } from './chat-realtime.service';
 import { ConnectionRegistry } from './connection-registry';
+import { GatewayEventsController } from './gateway-events.controller';
 
-/** The WebSocket edge: gateway, open sockets, pushes from REST. */
+/**
+ * The WebSocket edge: the gateway (frames → commands), the open sockets, and
+ * the consumer of service events (events → frames).
+ */
 @Module({
-  providers: [ChatGateway, ConnectionRegistry, ChatRealtimeService],
-  exports: [ChatRealtimeService],
+  controllers: [GatewayEventsController],
+  providers: [ChatGateway, ConnectionRegistry],
 })
 export class ChatModule {}

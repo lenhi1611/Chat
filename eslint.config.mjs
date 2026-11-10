@@ -7,7 +7,7 @@ import prettier from 'eslint-config-prettier/flat';
  *   scope:shell | scope:mfe | scope:api | scope:shared | scope:e2e   owner
  *   type:app | type:lib | type:e2e                       apps are never imported
  *   platform:angular | platform:node | platform:any       where the code runs
- *   domain:auth | domain:chat | domain:infra              backend domain (libs/api/*)
+ *   domain:auth | domain:chat | domain:infra | domain:shared | domain:edge   backend
  *   access:public | access:shell-only                     who may import a shared lib
  *
  * - shell and mfe-* apps may only import shared libs; mfe-* never import each
@@ -20,9 +20,13 @@ import prettier from 'eslint-config-prettier/flat';
  * - api (NestJS) may import platform-agnostic shared libs (contracts) and the
  *   libs/api/* backend libs. Browser code (scope:mfe, scope:shared) never
  *   imports libs/api/*.
- * - Backend domains are isolated: domain:auth and domain:chat may only import
- *   contracts and domain:infra (Redis…), never each other. The gateway wires
- *   them together (e.g. the chat USERS_PORT adapter over the auth UsersService).
+ * - Backend domains are isolated: domain:auth (libs/api/auth, auth-service)
+ *   and domain:chat (libs/api/chat, chat-service) may only import contracts,
+ *   domain:infra (Redis…), domain:shared (libs/api/messaging: RabbitMQ, the
+ *   EventPublisher port) and their own domain, never each other. The two
+ *   services talk only over RabbitMQ.
+ * - The api-gateway is domain:edge: contracts and messaging only. No domain
+ *   library, no Prisma, no Redis: it reaches the services over RabbitMQ.
  * - shared/contracts (platform:any) depends on no other project and on no
  *   framework package, so it compiles for both the browser and Node.
  */
@@ -70,13 +74,32 @@ const depConstraints = [
   // --- backend domains (libs/api/*) -----------------------------------------
   {
     sourceTag: 'domain:auth',
-    onlyDependOnLibsWithTags: ['platform:any', 'domain:infra'],
+    onlyDependOnLibsWithTags: [
+      'platform:any',
+      'domain:infra',
+      'domain:shared',
+      // its own domain: the auth-service app imports libs/api/auth
+      'domain:auth',
+    ],
   },
   {
     sourceTag: 'domain:chat',
-    onlyDependOnLibsWithTags: ['platform:any', 'domain:infra'],
+    onlyDependOnLibsWithTags: [
+      'platform:any',
+      'domain:infra',
+      'domain:shared',
+      // its own domain: the chat-service app imports libs/api/chat
+      'domain:chat',
+    ],
   },
   { sourceTag: 'domain:infra', onlyDependOnLibsWithTags: ['platform:any'] },
+  // The edge (api-gateway): RabbitMQ to the services, never their code.
+  {
+    sourceTag: 'domain:edge',
+    onlyDependOnLibsWithTags: ['platform:any', 'domain:shared'],
+  },
+  // RabbitMQ plumbing (libs/api/messaging), shared by the backend apps.
+  { sourceTag: 'domain:shared', onlyDependOnLibsWithTags: ['platform:any'] },
 ];
 
 export default [

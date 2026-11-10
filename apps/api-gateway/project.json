@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/api-gateway/src",
   "projectType": "application",
-  "tags": ["scope:api", "type:app", "platform:node"],
+  "tags": ["scope:api", "type:app", "platform:node", "domain:edge"],
   "targets": {
     "prune-lockfile": {
       "dependsOn": ["build"],
@@ -54,11 +54,10 @@
     "test": {
       "options": {
         "passWithNoTests": true
-      },
-      "dependsOn": ["^prisma-generate"]
+      }
     },
     "build": {
-      "dependsOn": ["^build", "^prisma-generate"]
+      "dependsOn": ["^build"]
     }
   }
 }

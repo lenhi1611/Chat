@@ -1,6 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  EVENT_PUBLISHER,
+  type EventPublisher,
+} from '@realtime-chat/api-messaging';
+import {
   AppError,
+  createDomainEvent,
+  DOMAIN_EVENTS,
   type ConversationDTO,
   type ListMessagesResponse,
   type MessageDTO,
@@ -14,7 +21,7 @@ import {
 } from '../generated/prisma/client';
 import { toConversationDto, toMessageDto } from './conversation.mapper';
 import { ChatPrismaService } from './prisma/chat-prisma.service';
-import { USERS_PORT, type UsersPort } from './users.port';
+import { UserDirectory } from './user-directory';
 
 export interface Created<T> {
   value: T;
@@ -50,8 +57,59 @@ export const dmKeyOf = (a: string, b: string) => [a, b].sort().join(':');
 export class ChatService {
   constructor(
     private readonly prisma: ChatPrismaService,
-    @Inject(USERS_PORT) private readonly users: UsersPort,
+    private readonly users: UserDirectory,
+    /** Provided by the app (chat-service: RabbitMQ). */
+    @Inject(EVENT_PUBLISHER) private readonly events: EventPublisher,
   ) {}
+
+  // --- events --------------------------------------------------------------
+
+  /**
+   * Stores the message (idempotent on clientMessageId) and announces it to
+   * every member (`chat.message.created`), even when it was stored before: a
+   * redelivered command must still reach the members (they drop duplicates
+   * by id). The DB write and the event are two steps; the command consumer
+   * retries the whole thing if the event cannot be published.
+   * @throws AppError NOT_FOUND for non-members
+   */
+  async sendMessage(
+    input: NewMessage,
+    correlationId: string,
+  ): Promise<Created<MessageDTO>> {
+    const result = await this.saveMessage(input);
+    await this.events.publish(
+      createDomainEvent(
+        DOMAIN_EVENTS.messageCreated,
+        {
+          message: result.value,
+          recipientUserIds: await this.getMemberIds(input.conversationId),
+        },
+        correlationId,
+      ),
+    );
+    return result;
+  }
+
+  /**
+   * Announces a new conversation to its members. After the DB write, without
+   * an outbox: if publishing fails the caller gets an error although the
+   * conversation exists (members see it on their next list).
+   */
+  private async conversationCreated(
+    conversation: ConversationDTO,
+    correlationId: string,
+  ): Promise<void> {
+    await this.events.publish(
+      createDomainEvent(
+        DOMAIN_EVENTS.conversationCreated,
+        {
+          conversation,
+          recipientUserIds: conversation.members.map((member) => member.id),
+        },
+        correlationId,
+      ),
+    );
+  }
 
   // --- conversations -----------------------------------------------------
 
@@ -63,6 +121,7 @@ export class ChatService {
   async createDm(
     callerId: string,
     otherUserId: string,
+    correlationId: string = randomUUID(),
   ): Promise<Created<ConversationDTO>> {
     if (callerId === otherUserId) {
       throw new AppError(
@@ -94,7 +153,9 @@ export class ChatService {
         },
         include: { members: true },
       });
-      return { value: await this.toDto(conversation), created: true };
+      const value = await this.toDto(conversation);
+      await this.conversationCreated(value, correlationId);
+      return { value, created: true };
     } catch (error) {
       // Lost the race to the other user creating the same DM.
       if (!isUniqueViolation(error)) throw error;
@@ -112,6 +173,7 @@ export class ChatService {
     callerId: string,
     name: string,
     memberIds: readonly string[],
+    correlationId: string = randomUUID(),
   ): Promise<ConversationDTO> {
     if (memberIds.includes(callerId)) {
       throw new AppError(
@@ -145,7 +207,9 @@ export class ChatService {
       },
       include: { members: true },
     });
-    return this.toDto(conversation);
+    const value = await this.toDto(conversation);
+    await this.conversationCreated(value, correlationId);
+    return value;
   }
 
   /**

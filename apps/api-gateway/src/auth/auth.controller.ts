@@ -4,28 +4,29 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Post,
   Req,
   Res,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  AuthService,
-  type AuthSession,
-  WsTicketService,
-} from '@realtime-chat/api-auth';
+import type { RpcClient } from '@realtime-chat/api-messaging';
 import {
   type AuthResponse,
+  type AuthSessionDto,
   type CurrentUser as CurrentUserDto,
   loginRequestSchema,
   type LoginRequest,
   registerRequestSchema,
   type RegisterRequest,
+  RPC_PATTERNS,
   type WsTicketResponse,
 } from '@realtime-chat/contracts';
 import type { Request, Response } from 'express';
 import type { Env } from '../config/env.schema';
+import { CorrelationId } from '../http/correlation-id';
 import { ZodValidationPipe } from '../http/zod-validation.pipe';
+import { AUTH_RPC } from '../messaging/service-clients.module';
 import { type AuthenticatedUser, CurrentUser } from './current-user.decorator';
 import { Public } from './public.decorator';
 import {
@@ -35,16 +36,16 @@ import {
 } from './refresh-cookie';
 
 /**
- * Thin HTTP edge over the auth domain: validation, cookies, status codes.
- * All rules live in AuthService (libs/api/auth).
+ * Thin HTTP edge over auth-service (RPC over RabbitMQ): validation, cookies,
+ * status codes. The service never sees cookies: it gets and returns the raw
+ * refresh token, and this controller moves it in and out of the cookie.
  */
 @Controller('auth')
 export class AuthController {
   private readonly secureCookie: boolean;
 
   constructor(
-    private readonly auth: AuthService,
-    private readonly wsTickets: WsTicketService,
+    @Inject(AUTH_RPC) private readonly auth: RpcClient,
     config: ConfigService<Env, true>,
   ) {
     this.secureCookie = config.get('COOKIE_SECURE', { infer: true });
@@ -54,9 +55,15 @@ export class AuthController {
   @Post('register')
   async register(
     @Body(new ZodValidationPipe(registerRequestSchema)) body: RegisterRequest,
+    @CorrelationId() correlationId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
-    return this.respond(await this.auth.register(body), response);
+    const session = await this.auth.call(
+      RPC_PATTERNS.authRegister,
+      body,
+      correlationId,
+    );
+    return this.respond(session, response);
   }
 
   @Public()
@@ -64,9 +71,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body(new ZodValidationPipe(loginRequestSchema)) body: LoginRequest,
+    @CorrelationId() correlationId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
-    return this.respond(await this.auth.login(body), response);
+    const session = await this.auth.call(
+      RPC_PATTERNS.authLogin,
+      body,
+      correlationId,
+    );
+    return this.respond(session, response);
   }
 
   /** Authenticated by the refresh cookie, not by a Bearer token. */
@@ -75,50 +88,79 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() request: Request,
+    @CorrelationId() correlationId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
+    let session: AuthSessionDto;
     try {
-      return this.respond(
-        await this.auth.refresh(readRefreshCookie(request)),
-        response,
+      session = await this.auth.call(
+        RPC_PATTERNS.authRefresh,
+        { refreshToken: readRefreshCookie(request) },
+        correlationId,
       );
     } catch (error) {
-      // A dead refresh token is useless: drop it from the browser too.
-      clearRefreshCookie(response, this.secureCookie);
+      // A dead refresh token is useless: drop it from the browser too. Not
+      // when the service is unreachable: the token may still be good.
+      if (!isUnavailable(error))
+        clearRefreshCookie(response, this.secureCookie);
       throw error;
     }
+    return this.respond(session, response);
   }
 
-  /** Always succeeds: revokes the cookie's session (if any) and clears it. */
+  /**
+   * Revokes the cookie's session (if any) and clears the cookie. The cookie
+   * is cleared even if auth-service cannot be reached (the user asked to
+   * leave); the error is still reported.
+   */
   @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(
     @Req() request: Request,
+    @CorrelationId() correlationId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    await this.auth.logout(readRefreshCookie(request));
     clearRefreshCookie(response, this.secureCookie);
+    // auth-service announces the end (auth.session.revoked): every gateway
+    // instance then closes that session's sockets with 4401.
+    await this.auth.call(
+      RPC_PATTERNS.authLogout,
+      { refreshToken: readRefreshCookie(request) },
+      correlationId,
+    );
   }
 
   @Get('me')
-  me(@CurrentUser() caller: AuthenticatedUser): Promise<CurrentUserDto> {
-    return this.auth.currentUser(caller.userId);
+  me(
+    @CurrentUser() caller: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
+  ): Promise<CurrentUserDto> {
+    return this.auth.call(
+      RPC_PATTERNS.authMe,
+      { userId: caller.userId },
+      correlationId,
+    );
   }
 
   @Post('ws-ticket')
   @HttpCode(HttpStatus.OK)
   wsTicket(
     @CurrentUser() caller: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
   ): Promise<WsTicketResponse> {
-    return this.wsTickets.issue({ userId: caller.userId, sid: caller.sid });
+    return this.auth.call(
+      RPC_PATTERNS.authWsTicketIssue,
+      { userId: caller.userId, sid: caller.sid },
+      correlationId,
+    );
   }
 
-  private respond(session: AuthSession, response: Response): AuthResponse {
+  private respond(session: AuthSessionDto, response: Response): AuthResponse {
     setRefreshCookie(
       response,
       session.refreshToken,
-      session.refreshTokenExpiresAt,
+      new Date(session.refreshTokenExpiresAt),
       this.secureCookie,
     );
     return {
@@ -128,3 +170,9 @@ export class AuthController {
     };
   }
 }
+
+const isUnavailable = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  error.code === 'SERVICE_UNAVAILABLE';

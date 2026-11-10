@@ -4,8 +4,8 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AccessTokenService } from '@realtime-chat/api-auth';
 import { AppError } from '@realtime-chat/contracts';
+import { AccessTokenVerifier } from './access-token.verifier';
 import type { AuthenticatedRequest } from './current-user.decorator';
 import { IS_PUBLIC } from './public.decorator';
 
@@ -20,7 +20,7 @@ const BEARER = /^Bearer ([^\s]+)$/i;
 export class AccessTokenGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly accessTokens: AccessTokenService,
+    private readonly accessTokens: AccessTokenVerifier,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -36,8 +36,8 @@ export class AccessTokenGuard implements CanActivate {
     if (!match) {
       throw new AppError('UNAUTHENTICATED', 'Missing bearer token');
     }
-    const claims = await this.accessTokens.verify(match[1]);
-    request.auth = { userId: claims.sub, sid: claims.sid };
+    // Verified locally (shared secret): no round trip to auth-service.
+    request.auth = await this.accessTokens.verify(match[1]);
     return true;
   }
 }

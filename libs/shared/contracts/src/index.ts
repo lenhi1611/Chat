@@ -15,3 +15,9 @@ export * from './lib/http/conversations';
 export * from './lib/ws/ws.constants';
 export * from './lib/ws/ws.schemas';
 export * from './lib/ws/ws.envelope';
+
+// RabbitMQ messaging between the api-gateway and the services (phase 3)
+export * from './lib/messaging/messaging.constants';
+export * from './lib/messaging/rpc.schemas';
+export * from './lib/messaging/command.schemas';
+export * from './lib/messaging/domain-event';

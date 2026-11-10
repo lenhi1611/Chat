@@ -16,6 +16,10 @@ export default defineConfig(() => ({
     globals: true,
     environment: 'node',
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // Integration tests need RabbitMQ (npm run infra:up).
+    setupFiles: ['./src/test-setup.ts'],
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
     reporters: ['default'],
     coverage: {
       reportsDirectory: '../../coverage/apps/api-gateway',

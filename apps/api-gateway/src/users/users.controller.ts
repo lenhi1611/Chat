@@ -1,6 +1,7 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { UsersService } from '@realtime-chat/api-auth';
+import { Controller, Get, Inject, Query } from '@nestjs/common';
+import type { RpcClient } from '@realtime-chat/api-messaging';
 import {
+  RPC_PATTERNS,
   type SearchUsersQuery,
   searchUsersQuerySchema,
   type UserSummary,
@@ -9,11 +10,13 @@ import {
   type AuthenticatedUser,
   CurrentUser,
 } from '../auth/current-user.decorator';
+import { CorrelationId } from '../http/correlation-id';
 import { ZodValidationPipe } from '../http/zod-validation.pipe';
+import { AUTH_RPC } from '../messaging/service-clients.module';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(@Inject(AUTH_RPC) private readonly auth: RpcClient) {}
 
   /** Prefix search on username (excluding the caller), at most 10 results. */
   @Get('search')
@@ -21,7 +24,12 @@ export class UsersController {
     @Query(new ZodValidationPipe(searchUsersQuerySchema))
     query: SearchUsersQuery,
     @CurrentUser() caller: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
   ): Promise<UserSummary[]> {
-    return this.users.searchByUsernamePrefix(query.q, caller.userId);
+    return this.auth.call(
+      RPC_PATTERNS.authUsersSearch,
+      { userId: caller.userId, q: query.q },
+      correlationId,
+    );
   }
 }
