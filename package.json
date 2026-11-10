@@ -16,6 +16,7 @@
     "build": "nx run-many -t build",
     "test": "nx run-many -t test",
     "e2e": "nx e2e shell-e2e",
+    "chaos": "node tools/chaos/run.mjs",
     "format": "nx format:write",
     "format:check": "nx format:check"
   },

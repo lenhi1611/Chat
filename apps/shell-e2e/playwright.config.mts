@@ -13,8 +13,8 @@ const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
  * REST + WebSocket), which talks to auth-service and chat-service over
  * RabbitMQ (Postgres, Redis and RabbitMQ from docker compose).
  *
- * Every test registers its own users (`e2e_…`), so tests do not share state;
- * those accounts stay in the database the gateway uses.
+ * Every test registers its own users (`e2e_…@example.test`), so tests do
+ * not share state; the global teardown deletes them afterwards.
  *
  * Locally, servers that are already running (e.g. `npm run serve:all`) are
  * reused; otherwise Playwright starts each one and waits for its URL.
@@ -24,6 +24,8 @@ const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
  */
 export default defineConfig({
   ...nxE2EPreset(import.meta.dirname, { testDir: './src' }),
+  // Deletes the accounts the tests registered (see the file).
+  globalTeardown: './src/support/global-teardown.mts',
   // Tests are isolated by their own users, but several browsers per test on
   // dev servers is heavy: keep one worker for stable timings.
   fullyParallel: false,
