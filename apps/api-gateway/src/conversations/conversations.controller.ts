@@ -25,7 +25,6 @@ import {
   type AuthenticatedUser,
   CurrentUser,
 } from '../auth/current-user.decorator';
-import { ChatRealtimeService } from '../chat/chat-realtime.service';
 import { CorrelationId } from '../http/correlation-id';
 import { ZodValidationPipe } from '../http/zod-validation.pipe';
 import { CHAT_RPC } from '../messaging/service-clients.module';
@@ -33,10 +32,7 @@ import { CHAT_RPC } from '../messaging/service-clients.module';
 /** Thin HTTP edge over chat-service (RPC over RabbitMQ): rules live there. */
 @Controller('conversations')
 export class ConversationsController {
-  constructor(
-    @Inject(CHAT_RPC) private readonly chat: RpcClient,
-    private readonly realtime: ChatRealtimeService,
-  ) {}
+  constructor(@Inject(CHAT_RPC) private readonly chat: RpcClient) {}
 
   /** The caller's conversations, most recent activity first. */
   @Get()
@@ -51,7 +47,10 @@ export class ConversationsController {
     );
   }
 
-  /** 201 when created; 200 when the DM already existed. */
+  /**
+   * 201 when created (chat-service announces it to the members' sockets with
+   * chat.conversation.created); 200 when the DM already existed.
+   */
   @Post()
   async create(
     @Body(new ZodValidationPipe(createConversationRequestSchema))
@@ -66,8 +65,6 @@ export class ConversationsController {
       correlationId,
     );
     response.status(created ? HttpStatus.CREATED : HttpStatus.OK);
-    // Until this gateway consumes chat.conversation.created (step 7).
-    if (created) this.realtime.conversationCreated(conversation);
     return conversation;
   }
 

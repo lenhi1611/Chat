@@ -43,6 +43,7 @@ export {
   defaultTopology,
   deliveryAttempt,
   EXCHANGE_OPTIONS,
+  gatewayEventsQueueName,
   INSTANCE_QUEUE_OPTIONS,
   queueOptions,
   topologyNames,

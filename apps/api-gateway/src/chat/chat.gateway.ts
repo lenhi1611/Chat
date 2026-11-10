@@ -1,9 +1,5 @@
 import type { IncomingMessage } from 'node:http';
-import {
-  Logger,
-  type OnModuleDestroy,
-  type OnModuleInit,
-} from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -12,18 +8,14 @@ import {
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
-import { AuthService } from '@realtime-chat/api-auth';
-import { ChatService } from '@realtime-chat/api-chat';
+import { CommandPublisher } from '@realtime-chat/api-messaging';
 import {
-  AppError,
   type ChatSendPayload,
   createEnvelope,
   type ServerEnvelope,
   type SystemErrorPayload,
-  WS_CLOSE_CODES,
   WS_EVENTS,
 } from '@realtime-chat/contracts';
-import type { Subscription } from 'rxjs';
 import type { WebSocket } from 'ws';
 import { ConnectionRegistry } from './connection-registry';
 import { INVALID_FRAME_EVENT } from './transport/client-frame-parser';
@@ -33,74 +25,35 @@ import { getSocketOwner } from './transport/upgrade-verifier';
 const CLOSE_POLICY_VIOLATION = 1008;
 
 /**
- * Authenticated chat over plain WebSocket. Path, payload limit and the ticket
- * check come from ChatWsAdapter; frames reaching the handlers below are
- * already validated against the shared protocol (client-frame-parser.ts).
+ * Authenticated chat over plain WebSocket: the edge between browsers and
+ * chat-service. Path, payload limit and the ticket check come from
+ * ChatWsAdapter; frames reaching the handlers are already validated against
+ * the shared protocol (client-frame-parser.ts).
  *
- * Message contents are never logged.
+ * It stores nothing and checks no membership: `chat.send` becomes a command
+ * for chat-service, and what comes back (stored message, rejection) arrives
+ * as events (GatewayEventsController). Message contents are never logged.
  */
 @WebSocketGateway()
-export class ChatGateway
-  implements
-    OnGatewayConnection,
-    OnGatewayDisconnect,
-    OnModuleInit,
-    OnModuleDestroy
-{
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(ChatGateway.name);
-  private sessionsEnded?: Subscription;
   /** Tail of each socket's chat.send queue (see handleChatSend). */
   private readonly sendQueues = new WeakMap<WebSocket, Promise<unknown>>();
 
   constructor(
     private readonly connections: ConnectionRegistry,
-    private readonly chat: ChatService,
-    private readonly auth: AuthService,
+    private readonly commands: CommandPublisher,
   ) {}
 
-  /** Logout (or a revoked session) closes that session's sockets with 4401. */
-  onModuleInit(): void {
-    this.sessionsEnded = this.auth.sessionsEnded$.subscribe(({ sid }) => {
-      const closed = this.connections.closeSession(
-        sid,
-        WS_CLOSE_CODES.sessionEnded,
-        'Session ended',
-      );
-      if (closed > 0)
-        this.logger.log(`Closed ${closed} socket(s) of ended session ${sid}`);
-    });
-  }
-
-  onModuleDestroy(): void {
-    this.sessionsEnded?.unsubscribe();
-  }
-
-  async handleConnection(
-    socket: WebSocket,
-    request: IncomingMessage,
-  ): Promise<void> {
+  handleConnection(socket: WebSocket, request: IncomingMessage): void {
     // Always set by the upgrade verifier; kept as a guard for other adapters.
     const owner = getSocketOwner(request);
     if (!owner) {
       socket.close(CLOSE_POLICY_VIOLATION, 'Not authenticated');
       return;
     }
-    // Registered before any await: frames, pongs and logout reach it at once.
     this.connections.add(socket, owner);
-    try {
-      // Every room of the user, in one query.
-      this.connections.join(
-        socket,
-        await this.chat.getConversationIdsForUser(owner.userId),
-      );
-    } catch (error) {
-      this.logger.error(
-        `Could not load rooms of user ${owner.userId}: ${error instanceof Error ? error.message : error}`,
-      );
-      socket.close(1011, 'Try again');
-      return;
-    }
-    // Welcome last: once it arrives, the client receives all its conversations.
+    // No rooms to load: events name their recipients.
     this.connections.send(
       socket,
       createEnvelope(WS_EVENTS.sessionWelcome, { userId: owner.userId }),
@@ -120,14 +73,11 @@ export class ChatGateway
   }
 
   /**
-   * Validate (parser) → member? → store (seq) → broadcast to every socket of
-   * every member, sender included. Failures answer the sender only, with its
-   * clientMessageId; the connection stays open.
-   *
-   * One socket's frames are handled one after another: run concurrently, the
-   * transactions would commit (and take their `seq`) in any order, so quick
-   * successive messages would be stored out of the order they were typed.
-   * Different sockets still run in parallel.
+   * Hands the message to chat-service as a durable command, once RabbitMQ
+   * has confirmed it. One socket's frames are published one after another,
+   * so they reach the queue (and get their `seq`) in the order typed. If
+   * RabbitMQ cannot take it, the sender gets SEND_FAILED right away;
+   * otherwise the outcome arrives later as an event.
    */
   @SubscribeMessage(WS_EVENTS.chatSend)
   handleChatSend(
@@ -135,56 +85,12 @@ export class ChatGateway
     @MessageBody() payload: ChatSendPayload,
   ): Promise<ServerEnvelope | undefined> {
     const previous = this.sendQueues.get(socket) ?? Promise.resolve();
-    const result = previous.then(() => this.processChatSend(socket, payload));
-    // processChatSend answers errors itself; the catch only keeps the chain
-    // alive if something unexpected throws.
+    const result = previous.then(() => this.publish(socket, payload));
     this.sendQueues.set(
       socket,
       result.catch(() => undefined),
     );
     return result;
-  }
-
-  private async processChatSend(
-    socket: WebSocket,
-    payload: ChatSendPayload,
-  ): Promise<ServerEnvelope | undefined> {
-    const sender = this.connections.get(socket);
-    if (!sender) return undefined;
-    try {
-      const { value: message, created } = await this.chat.saveMessage({
-        senderId: sender.userId,
-        conversationId: payload.conversationId,
-        clientMessageId: payload.clientMessageId,
-        text: payload.text,
-      });
-      // Membership is now proven: make sure this socket is in the room even
-      // if the conversation appeared after it connected.
-      this.connections.join(socket, [message.conversationId]);
-      const envelope = createEnvelope(WS_EVENTS.chatMessage, message);
-      if (created) {
-        this.connections.sendToConversation(message.conversationId, envelope);
-        return undefined;
-      }
-      // A resend of a stored message: everyone else already has it.
-      return envelope;
-    } catch (error) {
-      if (error instanceof AppError && error.code === 'NOT_FOUND') {
-        return this.error(
-          'NOT_A_MEMBER',
-          'Not a member of this conversation',
-          payload,
-        );
-      }
-      this.logger.error(
-        `chat.send failed for user ${sender.userId}: ${error instanceof Error ? error.message : error}`,
-      );
-      return this.error(
-        'SEND_FAILED',
-        'Message could not be sent, retry',
-        payload,
-      );
-    }
   }
 
   /** Replies to the offending socket only; the connection stays open. */
@@ -193,15 +99,35 @@ export class ChatGateway
     return createEnvelope(WS_EVENTS.systemError, error);
   }
 
-  private error(
-    code: SystemErrorPayload['code'],
-    message: string,
+  private async publish(
+    socket: WebSocket,
     payload: ChatSendPayload,
-  ): ServerEnvelope {
-    return createEnvelope(WS_EVENTS.systemError, {
-      code,
-      message,
-      clientMessageId: payload.clientMessageId,
-    });
+  ): Promise<ServerEnvelope | undefined> {
+    const sender = this.connections.get(socket);
+    if (!sender) return undefined;
+    const correlationId = crypto.randomUUID();
+    try {
+      await this.commands.sendChat(
+        {
+          ...payload,
+          userId: sender.userId,
+          requestedAt: new Date().toISOString(),
+        },
+        correlationId,
+      );
+      this.logger.log(
+        `chat.send queued for user ${sender.userId} [correlationId=${correlationId}]`,
+      );
+      return undefined;
+    } catch (error) {
+      this.logger.error(
+        `chat.send could not be queued [correlationId=${correlationId}]: ${error instanceof Error ? error.message : error}`,
+      );
+      return createEnvelope(WS_EVENTS.systemError, {
+        code: 'SEND_FAILED',
+        message: 'Message could not be sent, retry',
+        clientMessageId: payload.clientMessageId,
+      });
+    }
   }
 }

@@ -17,8 +17,6 @@ export const CLOSE_GOING_AWAY = 1001;
 const SHUTDOWN_GRACE_MS = 1000;
 
 export interface ConnectionInfo extends SocketOwner {
-  /** Conversations (rooms) this socket receives messages of. */
-  conversationIds: Set<string>;
   connectedAt: Date;
   /** Heartbeat flag: cleared on each ping, set again by the client's pong. */
   isAlive: boolean;
@@ -54,10 +52,12 @@ class SocketIndex {
 }
 
 /**
- * Open sockets of this gateway instance, indexed by user, login session and
- * conversation, plus the heartbeat that removes dead ones. A user may have
- * several sockets (tabs). In-memory: with several gateway instances each one
- * only knows its own sockets (cross-instance fan-out is phase 5).
+ * Open sockets of this gateway instance, indexed by user and login session,
+ * plus the heartbeat that removes dead ones. A user may have several sockets
+ * (tabs). There are no rooms: events from chat-service name their recipients
+ * (`recipientUserIds`), so this gateway never needs to know who belongs to
+ * which conversation. Each instance receives every event on its own queue
+ * and delivers to the sockets it holds.
  */
 @Injectable()
 export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
@@ -65,7 +65,6 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
   private readonly connections = new Map<WebSocket, ConnectionInfo>();
   private readonly byUser = new SocketIndex();
   private readonly bySession = new SocketIndex();
-  private readonly byConversation = new SocketIndex();
   private heartbeat?: NodeJS.Timeout;
 
   constructor(private readonly config: ConfigService<Env, true>) {}
@@ -75,17 +74,11 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Sizes of every index: all zero once every socket is gone (no leak). */
-  stats(): {
-    sockets: number;
-    users: number;
-    sessions: number;
-    conversations: number;
-  } {
+  stats(): { sockets: number; users: number; sessions: number } {
     return {
       sockets: this.connections.size,
       users: this.byUser.size,
       sessions: this.bySession.size,
-      conversations: this.byConversation.size,
     };
   }
 
@@ -110,7 +103,6 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
     const info: ConnectionInfo = {
       userId: owner.userId,
       sid: owner.sid,
-      conversationIds: new Set(),
       connectedAt: new Date(),
       isAlive: true,
     };
@@ -134,29 +126,7 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
     this.connections.delete(socket);
     this.byUser.delete(info.userId, socket);
     this.bySession.delete(info.sid, socket);
-    for (const conversationId of info.conversationIds) {
-      this.byConversation.delete(conversationId, socket);
-    }
     return info;
-  }
-
-  /** Subscribes one socket to conversations (ignored if it has gone). */
-  join(socket: WebSocket, conversationIds: Iterable<string>): void {
-    const info = this.connections.get(socket);
-    if (!info) return;
-    for (const conversationId of conversationIds) {
-      info.conversationIds.add(conversationId);
-      this.byConversation.add(conversationId, socket);
-    }
-  }
-
-  /** Subscribes every open socket of these users to a conversation. */
-  joinUsers(conversationId: string, userIds: Iterable<string>): void {
-    for (const userId of userIds) {
-      for (const socket of this.byUser.get(userId)) {
-        this.join(socket, [conversationId]);
-      }
-    }
   }
 
   send(socket: WebSocket, envelope: ServerEnvelope): void {
@@ -165,9 +135,16 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** One frame to every open socket in a conversation; returns the count. */
-  sendToConversation(conversationId: string, envelope: ServerEnvelope): number {
-    return this.sendToAll(this.byConversation.get(conversationId), envelope);
+  /**
+   * One frame to every open socket (on this instance) of these users;
+   * returns how many sockets got it.
+   */
+  sendToUsers(userIds: Iterable<string>, envelope: ServerEnvelope): number {
+    const sockets = new Set<WebSocket>();
+    for (const userId of userIds) {
+      for (const socket of this.byUser.get(userId)) sockets.add(socket);
+    }
+    return this.sendToAll(sockets, envelope);
   }
 
   /** Closes every socket of a login session; returns the count. */

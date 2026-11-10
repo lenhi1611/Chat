@@ -1,6 +1,7 @@
 import {
   DOMAIN_EVENTS,
   EVENTS_EXCHANGE,
+  gatewayEventsQueue,
   MESSAGING_DEFAULTS,
   QUEUES,
 } from '@realtime-chat/contracts';
@@ -46,6 +47,18 @@ export function topologyNames(prefix = ''): TopologyNames {
     chatCommandsDlq: `${prefix}${QUEUES.chatCommandsDlq}`,
     chatUserSync: `${prefix}${QUEUES.chatUserSync}`,
   };
+}
+
+/**
+ * `gateway.events.<instanceId>`, with the same prefix as the other names
+ * (tests). Not part of the shared topology: each gateway declares its own.
+ */
+export function gatewayEventsQueueName(
+  { names }: TopologySettings,
+  instanceId: string,
+): string {
+  const prefix = names.authRpc.slice(0, -QUEUES.authRpc.length);
+  return `${prefix}${gatewayEventsQueue(instanceId)}`;
 }
 
 export interface TopologySettings {

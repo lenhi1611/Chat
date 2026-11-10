@@ -23,7 +23,6 @@ import {
   type WsTicketResponse,
 } from '@realtime-chat/contracts';
 import type { Request, Response } from 'express';
-import { ChatRealtimeService } from '../chat/chat-realtime.service';
 import type { Env } from '../config/env.schema';
 import { CorrelationId } from '../http/correlation-id';
 import { ZodValidationPipe } from '../http/zod-validation.pipe';
@@ -47,7 +46,6 @@ export class AuthController {
 
   constructor(
     @Inject(AUTH_RPC) private readonly auth: RpcClient,
-    private readonly realtime: ChatRealtimeService,
     config: ConfigService<Env, true>,
   ) {
     this.secureCookie = config.get('COOKIE_SECURE', { infer: true });
@@ -124,13 +122,13 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
     clearRefreshCookie(response, this.secureCookie);
-    const { session } = await this.auth.call(
+    // auth-service announces the end (auth.session.revoked): every gateway
+    // instance then closes that session's sockets with 4401.
+    await this.auth.call(
       RPC_PATTERNS.authLogout,
       { refreshToken: readRefreshCookie(request) },
       correlationId,
     );
-    // Until this gateway consumes auth.session.revoked (step 7).
-    if (session) this.realtime.sessionEnded(session.sid);
   }
 
   @Get('me')
