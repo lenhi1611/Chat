@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   EVENT_PUBLISHER,
   type EventPublisher,
@@ -58,13 +58,8 @@ export class ChatService {
   constructor(
     private readonly prisma: ChatPrismaService,
     private readonly users: UserDirectory,
-    /**
-     * Provided by chat-service (RabbitMQ). Optional while the api-gateway
-     * still runs this library in-process (it pushes to sockets itself).
-     */
-    @Optional()
-    @Inject(EVENT_PUBLISHER)
-    private readonly events?: EventPublisher,
+    /** Provided by the app (chat-service: RabbitMQ). */
+    @Inject(EVENT_PUBLISHER) private readonly events: EventPublisher,
   ) {}
 
   // --- events --------------------------------------------------------------
@@ -82,7 +77,7 @@ export class ChatService {
     correlationId: string,
   ): Promise<Created<MessageDTO>> {
     const result = await this.saveMessage(input);
-    await this.events?.publish(
+    await this.events.publish(
       createDomainEvent(
         DOMAIN_EVENTS.messageCreated,
         {
@@ -104,7 +99,7 @@ export class ChatService {
     conversation: ConversationDTO,
     correlationId: string,
   ): Promise<void> {
-    await this.events?.publish(
+    await this.events.publish(
       createDomainEvent(
         DOMAIN_EVENTS.conversationCreated,
         {

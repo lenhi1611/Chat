@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import { AppError } from '@realtime-chat/contracts';
+import {
+  AppError,
+  DOMAIN_EVENTS,
+  type DomainEvent,
+} from '@realtime-chat/contracts';
 import {
   createAuthTestPrisma,
   truncateAuthTables,
@@ -41,8 +45,15 @@ beforeAll(async () => {
     new UsersService(prisma),
     new PasswordService(),
     new AccessTokenService(options),
+    // Records what would go to RabbitMQ; `ended` = the revoked sessions.
+    {
+      publish: async (event: DomainEvent) => {
+        if (event.type === DOMAIN_EVENTS.sessionRevoked) {
+          ended.push(event.payload);
+        }
+      },
+    },
   );
-  auth.sessionsEnded$.subscribe((session) => ended.push(session));
 });
 afterAll(() => prisma.onModuleDestroy());
 beforeEach(async () => {

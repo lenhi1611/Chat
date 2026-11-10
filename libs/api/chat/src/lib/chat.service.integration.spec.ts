@@ -1,5 +1,5 @@
 import { inject } from 'vitest';
-import { AppError } from '@realtime-chat/contracts';
+import { AppError, type DomainEvent } from '@realtime-chat/contracts';
 import { FakeUserSource } from '../testing/fake-user-source';
 import { truncateChatTables } from '../testing/chat-test-db';
 import { ChatService, dmKeyOf } from './chat.service';
@@ -10,6 +10,8 @@ describe('ChatService (integration, chat_test)', () => {
   let prisma: ChatPrismaService;
   let users: FakeUserSource;
   let chat: ChatService;
+  /** What would go to RabbitMQ. */
+  let published: DomainEvent[];
   const queries: string[] = [];
 
   beforeAll(async () => {
@@ -28,7 +30,12 @@ describe('ChatService (integration, chat_test)', () => {
   beforeEach(async () => {
     await truncateChatTables(prisma);
     users = new FakeUserSource();
-    chat = new ChatService(prisma, new UserDirectory(prisma, users));
+    published = [];
+    chat = new ChatService(prisma, new UserDirectory(prisma, users), {
+      publish: async (event) => {
+        published.push(event);
+      },
+    });
     queries.length = 0;
   });
 
