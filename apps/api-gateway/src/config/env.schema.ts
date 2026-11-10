@@ -54,6 +54,13 @@ const envObject = z.object({
   WS_ALLOWED_ORIGINS: originList('http://localhost:4200,http://localhost:4202'),
   /** Ping interval; a client that misses one pong is terminated. */
   WS_HEARTBEAT_MS: z.coerce.number().int().min(10).default(30_000),
+  /**
+   * A socket is closed (4000) after this long and the client reconnects with
+   * a new ticket, which is only issued for a live session: a session that
+   * expired or was revoked without an event reaching us ends here at the
+   * latest. Default: the access-token lifetime.
+   */
+  WS_MAX_AGE_SECONDS: z.coerce.number().int().min(1).default(900),
 
   /** auth_db (libs/api/auth) and chat_db (libs/api/chat): one database per domain. */
   DATABASE_URL_AUTH: postgresUrl,

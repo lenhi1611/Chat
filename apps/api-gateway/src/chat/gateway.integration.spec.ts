@@ -1,194 +1,36 @@
-import { Controller, type INestApplication, Logger } from '@nestjs/common';
+import { MessagingConnection } from '@realtime-chat/api-messaging';
 import {
-  Ctx,
-  MessagePattern,
-  type MicroserviceOptions,
-  Payload,
-  type RmqContext,
-} from '@nestjs/microservices';
-import { Test } from '@nestjs/testing';
-import {
-  AmqpEventPublisher,
-  handleRpc,
-  MESSAGING_OPTIONS,
-  MessagingConnection,
-  rpcServerOptions,
-  type TopologySettings,
-  topologyNames,
-  withDefaults,
-} from '@realtime-chat/api-messaging';
-import {
-  AppError,
   createDomainEvent,
   DOMAIN_EVENTS,
   type DomainEvent,
   MESSAGING_HEADERS,
-  RPC_PATTERNS,
 } from '@realtime-chat/contracts';
-import { type Channel, type ChannelModel, connect } from 'amqplib';
-import { WebSocket } from 'ws';
-import { testRabbitUrl } from '../../../../tools/db/env.mjs';
-import { AppModule } from '../app/app.module';
-import { configureApp, connectGatewayEvents } from '../app/configure-app';
+import type { Channel } from 'amqplib';
+import {
+  framesOf,
+  type GatewayHarness,
+  startGateway,
+  until,
+  wait,
+} from '../testing/gateway-harness';
 import { ConnectionRegistry } from './connection-registry';
 
 /*
- * The WebSocket edge over RabbitMQ: the real gateway on a random port, a fake
- * auth-service consuming tickets, events published straight to this run's
- * exchange, commands read from this run's queue (random prefix).
+ * The WebSocket edge over RabbitMQ (see the harness): tickets, commands,
+ * events to sockets, registry, broker loss.
  */
 
-Logger.overrideLogger(false);
-
-const url = testRabbitUrl();
-const prefix = `test.${crypto.randomUUID().slice(0, 8)}.`;
-const topology: TopologySettings = {
-  names: topologyNames(prefix),
-  retryDelayMs: 300,
-};
-const names = topology.names;
-const ORIGIN = 'http://localhost:4200';
-
-// --- fake auth-service: single-use tickets -------------------------------------------
-
-const tickets = new Map<string, { userId: string; sid: string }>();
-
-@Controller()
-class FakeAuthController {
-  @MessagePattern(RPC_PATTERNS.authWsTicketConsume)
-  consume(@Payload() data: unknown, @Ctx() context: unknown) {
-    return handleRpc(
-      RPC_PATTERNS.authWsTicketConsume,
-      data,
-      context as RmqContext,
-      new Logger('fake-auth'),
-      async ({ ticket }) => {
-        if (ticket === 'auth-is-broken') {
-          throw new AppError('SERVICE_UNAVAILABLE', 'down');
-        }
-        const owner = tickets.get(ticket) ?? null;
-        tickets.delete(ticket);
-        return { owner };
-      },
-    );
-  }
-}
-
-function ticketFor(userId: string, sid: string): string {
-  const ticket = crypto.randomUUID();
-  tickets.set(ticket, { userId, sid });
-  return ticket;
-}
-
-// --- setup ---------------------------------------------------------------------------
-
-let gateway: INestApplication;
-let fakeAuth: INestApplication;
-let wsUrl: string;
-let amqp: ChannelModel;
-let channel: Channel;
-let events: AmqpEventPublisher;
-
+let h: GatewayHarness;
 beforeAll(async () => {
-  const fakeModule = await Test.createTestingModule({
-    controllers: [FakeAuthController],
-  }).compile();
-  fakeAuth = fakeModule.createNestApplication({ logger: false });
-  fakeAuth.connectMicroservice<MicroserviceOptions>(
-    rpcServerOptions(url, topology, 'authRpc'),
-  );
-  await fakeAuth.init();
-  await fakeAuth.startAllMicroservices();
-
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(MESSAGING_OPTIONS)
-    .useValue(
-      withDefaults({
-        url,
-        connectionName: 'gateway-test',
-        topology,
-        rpcTimeoutMs: 3000,
-        shutdownGraceMs: 500,
-      }),
-    )
-    .compile();
-  gateway = moduleRef.createNestApplication({ logger: false });
-  configureApp(gateway);
-  connectGatewayEvents(gateway, `test-${crypto.randomUUID().slice(0, 6)}`);
-  await gateway.listen(0);
-  await gateway.startAllMicroservices();
-  await gateway.get(MessagingConnection).whenReady();
-  const address = gateway.getHttpServer().address() as { port: number };
-  wsUrl = `ws://127.0.0.1:${address.port}/ws`;
-
-  amqp = await connect(url);
-  channel = await amqp.createChannel();
-  events = new AmqpEventPublisher(gateway.get(MessagingConnection), names);
+  h = await startGateway();
 });
+afterAll(() => h.stop());
 
-afterAll(async () => {
-  await gateway.close();
-  await fakeAuth.close();
-  for (const [key, name] of Object.entries(names)) {
-    if (key === 'exchange') await channel.deleteExchange(name);
-    else await channel.deleteQueue(name);
-  }
-  await amqp.close();
-});
-
-// --- helpers -------------------------------------------------------------------------
-
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function until(check: () => boolean, timeoutMs = 5000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!check()) {
-    if (Date.now() > deadline) throw new Error('condition not met in time');
-    await wait(20);
-  }
-}
-
-interface Client {
-  socket: WebSocket;
-  frames: { event: string; data: Record<string, unknown> }[];
-  closeCode?: number;
-}
-
-/** Opens a socket; resolves after session.welcome, or with the HTTP refusal. */
-function open(
-  ticket: string | null,
-  origin = ORIGIN,
-): Promise<Client | { refused: number }> {
-  return new Promise((resolve) => {
-    const socket = new WebSocket(
-      ticket === null ? wsUrl : `${wsUrl}?ticket=${encodeURIComponent(ticket)}`,
-      { origin },
-    );
-    const client: Client = { socket, frames: [] };
-    socket.on('message', (raw) => {
-      const frame = JSON.parse(raw.toString());
-      client.frames.push(frame);
-      if (frame.event === 'session.welcome') resolve(client);
-    });
-    socket.on('close', (code) => {
-      client.closeCode = code;
-    });
-    socket.on('unexpected-response', (_req, res) =>
-      resolve({ refused: res.statusCode ?? 0 }),
-    );
-    socket.on('error', () => undefined);
-  });
-}
-
-async function openAs(userId: string, sid = crypto.randomUUID()) {
-  const result = await open(ticketFor(userId, sid));
-  if ('refused' in result) throw new Error(`refused ${result.refused}`);
-  return result;
-}
-
-const framesOf = (client: Client, event: string) =>
-  client.frames.filter((frame) => frame.event === event);
-
-const publish = (event: DomainEvent) => events.publish(event);
+const open: GatewayHarness['open'] = (...args) => h.open(...args);
+const openAs: GatewayHarness['openAs'] = (...args) => h.openAs(...args);
+const ticketFor: GatewayHarness['ticketFor'] = (...args) =>
+  h.ticketFor(...args);
+const publish = (event: DomainEvent) => h.events.publish(event);
 
 // --- tests ---------------------------------------------------------------------------
 
@@ -209,7 +51,7 @@ describe('upgrade', () => {
       refused: 403,
     });
     // Refused on Origin before the ticket was looked at: still usable.
-    expect(tickets.has(foreign)).toBe(true);
+    expect(h.tickets.has(foreign)).toBe(true);
     if ('socket' in first) first.socket.close();
   });
 
@@ -232,7 +74,9 @@ describe('chat.send → command', () => {
     let message: Awaited<ReturnType<Channel['get']>> = false;
     const deadline = Date.now() + 5000;
     while (!message && Date.now() < deadline) {
-      message = await channel.get(names.chatCommands, { noAck: true });
+      message = await h.channel.get(h.topology.names.chatCommands, {
+        noAck: true,
+      });
       if (!message) await wait(20);
     }
     expect(message).not.toBe(false);
@@ -365,7 +209,7 @@ describe('events → sockets', () => {
 
 describe('registry', () => {
   it('leaks nothing after many sockets come and go', async () => {
-    const registry = gateway.get(ConnectionRegistry);
+    const registry = h.gateway.get(ConnectionRegistry);
     await until(() => registry.size === 0);
     const clients = await Promise.all(
       Array.from({ length: 20 }, () => openAs(crypto.randomUUID())),
@@ -381,7 +225,7 @@ describe('RabbitMQ unavailable', () => {
   it('answers SEND_FAILED at once when the command cannot be queued', async () => {
     const client = await openAs(crypto.randomUUID());
     // The gateway loses its publishing connection.
-    await gateway.get(MessagingConnection).close();
+    await h.gateway.get(MessagingConnection).close();
     const clientMessageId = crypto.randomUUID();
     client.socket.send(
       JSON.stringify({

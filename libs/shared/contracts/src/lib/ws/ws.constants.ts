@@ -6,6 +6,11 @@ export const WS_TICKET_PARAM = 'ticket';
 
 /** Application close codes (4000–4999 are free for applications, RFC 6455). */
 export const WS_CLOSE_CODES = {
+  /**
+   * The socket reached its maximum age: reconnect with a fresh ticket. A
+   * session that has ended meanwhile gets no ticket, so it ends there.
+   */
+  maxAgeReached: 4000,
   /** The login session ended (logout, or revoked): do not reconnect. */
   sessionEnded: 4401,
 } as const;

@@ -5,7 +5,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { ServerEnvelope } from '@realtime-chat/contracts';
+import { type ServerEnvelope, WS_CLOSE_CODES } from '@realtime-chat/contracts';
 import { WebSocket } from 'ws';
 import type { Env } from '../config/env.schema';
 import type { SocketOwner } from './transport/upgrade-verifier';
@@ -20,6 +20,8 @@ export interface ConnectionInfo extends SocketOwner {
   connectedAt: Date;
   /** Heartbeat flag: cleared on each ping, set again by the client's pong. */
   isAlive: boolean;
+  /** Closes the socket when it reaches its maximum age. */
+  maxAgeTimer: NodeJS.Timeout;
 }
 
 /** Map of key → set of sockets, dropping a key when its set gets empty. */
@@ -66,8 +68,11 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
   private readonly byUser = new SocketIndex();
   private readonly bySession = new SocketIndex();
   private heartbeat?: NodeJS.Timeout;
+  private readonly maxAgeMs: number;
 
-  constructor(private readonly config: ConfigService<Env, true>) {}
+  constructor(private readonly config: ConfigService<Env, true>) {
+    this.maxAgeMs = config.get('WS_MAX_AGE_SECONDS', { infer: true }) * 1000;
+  }
 
   get size(): number {
     return this.connections.size;
@@ -105,7 +110,14 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
       sid: owner.sid,
       connectedAt: new Date(),
       isAlive: true,
+      // Up to 10% earlier: sockets opened together do not all reconnect at
+      // the same moment.
+      maxAgeTimer: setTimeout(
+        () => socket.close(WS_CLOSE_CODES.maxAgeReached, 'Max age reached'),
+        this.maxAgeMs * (0.9 + Math.random() * 0.1),
+      ),
     };
+    info.maxAgeTimer.unref();
     this.connections.set(socket, info);
     this.byUser.add(info.userId, socket);
     this.bySession.add(info.sid, socket);
@@ -124,6 +136,7 @@ export class ConnectionRegistry implements OnModuleInit, OnModuleDestroy {
     const info = this.connections.get(socket);
     if (!info) return undefined;
     this.connections.delete(socket);
+    clearTimeout(info.maxAgeTimer);
     this.byUser.delete(info.userId, socket);
     this.bySession.delete(info.sid, socket);
     return info;
